@@ -22,33 +22,10 @@
 #include "boost/math/distributions/beta.hpp"
 #include "boost/math/quadrature/trapezoidal.hpp"
 
-#include "fftw3/fftw3.h"
-
 
 
 enum class SampleType : char { curve, deriv, both };
 
-
-// Given a vector <fourier_results>, return the maximum element of that vector.
-double
-difMaximum(const std::vector<double>& v)
-{
-    constexpr double alpha = 100000;
-    // [ softmax_normalizer := Σ_i=1^N (e^αx_i)
-    //   where x_i is the value at position i of the vector v ]
-    const double softmax_normalizer = std::accumulate(v.begin(), v.end(), 0.0,
-        [alpha](double accum, double value) {
-            return accum + std::exp(value * alpha);
-        });
-
-    // [ softmax_numerator := Σ_i=1^N x_i * (e^αx_i)
-    //   where x_i is the value at position i of the vector v ]
-    const double softmax_numerator = std::accumulate(v.begin(), v.end(), 0.0,
-        [alpha](double accum, double value) {
-            return accum + value * std::exp(value * alpha);
-        });
-    return softmax_numerator / softmax_normalizer;
-}
 
 
 // Print the rows of a matrix separated by ',' and the columns by '\n'.
@@ -374,59 +351,6 @@ sampleCurveDistribution(Function curve_function,
 }
 
 
-// Calculates the Fast Fourier Transform of the vector <derivative_norm>.
-// References:
-//  (1) http://www.fftw.org/fftw3_doc/Complex-One_002dDimensional-DFTs.html
-//  (2) http://www.fftw.org/fftw3_doc/One_002dDimensional-DFTs-of-Real-Data.html
-//  (3) http://www.fftw.org/fftw3_doc/Planner-Flags.html
-// Steps:
-//  1: Alloc arrays and plan
-//  2: Create plan with _plan_dft
-//  3: Execute plan. This populates the output array in step 2
-//  4: Destroy plan and free all arrays
-Eigen::VectorXd
-fourierTransform(const Eigen::VectorXd& derivative_norm)
-{
-
-    // [ input_size   := size of derivative_norm
-    // ; output_size  := size of derivative_norm / 2 + 1, as per ref. (2)
-    // ; input_array  := v in R^input_size, where v_j = w/e
-    // ; output_array := v in C^output_size, where v_j = w/e
-    // ; plan := plan to execute the FFT with in the positive direction with a
-    //        very fast, sub-optimal algorithm in correctness ]
-    const int input_size  = derivative_norm.rows();
-    const int output_size = static_cast<int>(std::floor(input_size / 2)) + 1;
-    double* input_array   = fftw_alloc_real(input_size);
-    fftw_complex* output_array = fftw_alloc_complex(output_size);
-    // Must create the plan before initializing the input_array.
-    fftw_plan plan = fftw_plan_dft_r2c_1d(input_size, input_array, output_array,
-                                          FFTW_ESTIMATE | FFTW_DESTROY_INPUT);
-
-    // [ input_array := v in R^array_size where v[j] = derivative_norm[j] ]
-    for (int j = 0; j < input_size; ++j) {
-        input_array[j] = derivative_norm[j];
-    }
-
-    // [ output_array := FFT of input_array
-    // ; input_array  := w/e ]
-    fftw_execute(plan);
-
-    // [ output_vector := v in C^output_size where v[j] = Re(output_array[j]) ]
-    Eigen::VectorXd output_vector(output_size);
-    for (int j = 0; j < output_size; ++j) {
-        output_vector[j] = output_array[j][0];
-    }
-
-    // [ plan; input_array; output_array := empty; empty; empty ]
-    fftw_destroy_plan(plan);
-    fftw_free(input_array);
-    fftw_free(output_array);
-
-    return output_vector;
-}
-
-
-
 // Calculate the distribution's entropy.
 double
 entropy(const Eigen::VectorXd& distribution)
@@ -567,8 +491,6 @@ main(int argc, char* argv[])
                                                        sample_points,
                                                        vocab.size());
         Eigen::VectorXd deriv_norm = deriv.rowwise().norm();
-        Eigen::VectorXd fourier_trans = fourierTransform(deriv_norm);
-        fourier_trans = fourier_trans.tail(fourier_trans.rows() - 1);
         printMatrix(outfile_name.str() + "_deriv.txt", deriv);
         printMatrix(outfile_name.str() + "_dnorm.txt", deriv_norm);
     }
