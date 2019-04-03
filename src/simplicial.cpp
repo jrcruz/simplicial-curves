@@ -10,7 +10,6 @@
 #include <fstream>
 
 #include "args/args.hxx"
-
 #include "pugixml/pugixml.cpp"
 
 // #include "fmt/format.h"
@@ -402,12 +401,141 @@ getFileName(const std::string& file_path)
 }
 
 
+// Return the dimensions of a matrix stored in 'filename'. First element of the
+// pair is the number of rows and the second element is the number of columns.
+std::pair<int, int>
+countDimensions(const std::string& filename)
+{
+    std::ifstream input_file(filename);
+    int rows = 0;
+    int columns = 0;
+    bool in_first_line = true;
+    // [ input_file reached eof -> I
+    // | else -> rows    := number of rows in the file + 1
+    //           columns := number of spaces between numbers in a row
+    //           in_first_line := w/e ]
+    while (not input_file.eof()) {
+        char c;
+        input_file.get(c);
+        // Reached the end of the last row, so we don't need to keep counting
+        // spaces.
+        if (c == '\n') {
+            in_first_line = false;
+            ++rows;
+        }
+        else if (c == ' ' and in_first_line) {
+            ++columns;
+        }
+    }
+    // Subtract 1 from rows because we extract '\n' again when we reach eof, so
+    // the last newline is counted twice. Add 1 to columns because we were
+    // counting spaces between columns.
+    return {rows - 1, columns + 1};
+}
+
+
+
+std::vector<std::string>
+splitOnPunct(const std::string& word)
+{
+    std::vector<std::string> split_vector;
+    std::string tmp;
+    for (char c : word) {
+        if (std::ispunct(c) != 0) {
+            split_vector.emplace_back(tmp);
+            tmp.clear();
+        }
+        else {
+            tmp.push_back(std::tolower(c));
+        }
+    }
+    split_vector.emplace_back(tmp);
+    return split_vector;
+}
+
+
+Eigen::MatrixXd
+readTopicEmbeddings(const std::string& matrix_pathname,
+                    const std::string& vocab_pathname,
+                    const std::string& document_pathname)
+{
+    // [ n_topics := number of rows in the matrix;
+    //   n_words  := number of columns in the matrix ]
+    const auto [n_topics, n_words] = countDimensions(matrix_pathname);
+    std::ifstream matrix_file(matrix_pathname);
+
+    // [ topic_embeddings := topic x word matrix, where each row is the
+    //                       log-distribution of the topic through the vocabulary ]
+    Eigen::MatrixXd topic_embeddings(n_topics, n_words);
+    for (int row = 0; row < n_topics; ++row) {
+        // [ row_string := row in matrix_file (everything until \n);
+        //   row_values := n_words+1 sized vector with each individual row value ]
+        std::string row_string;
+        std::getline(matrix_file, row_string);
+        std::vector<std::string> row_values = split(row_string, ' ');
+        std::cout << row_values.size() << "\n";
+
+        // Skip over the first element since it's just whitespace.
+        for (int column = 0; column < n_words; ++column) {
+            topic_embeddings(row, column) = std::stod(row_values[column]);
+        }
+    }
+    // [ topic_embeddings := topic_embeddings^T (word x topic matrix), where
+    //                       each row is the embedding in the topic space for
+    //                       the word ]
+    topic_embeddings.transposeInPlace();
+
+    // Load entire lexicon (only the words that have a corresponding word embedding)
+    // [ vocabulary_map := word -> N mapping, from the string to the words' index in the vocabulary ]
+    std::ifstream vocab_file(vocab_pathname);
+    std::unordered_map<std::string, int> vocabulary_map;
+    int voc_size = 0;
+    std::string vocab_word;
+    while (vocab_file >> vocab_word) {
+        vocabulary_map[vocab_word] = voc_size;
+        ++voc_size;
+    }
+
+    // Read the original file and map each word to its corresponding embedding
+    // (using the lexicon to index the embedding matrix)
+    std::vector<Eigen::VectorXd> word_embedding_sequence;
+    std::ifstream document_file(document_pathname);
+    std::string doc_word;
+    while (document_file >> doc_word) {
+        for (const std::string& stripped : splitOnPunct(doc_word)) {
+            // Only add pruned words
+            std::cout << "Found " << stripped << "\n";
+            if (vocabulary_map.find(stripped) != vocabulary_map.end()) {
+                std::cout << "'" << stripped << "' is in the vocabulary\n";
+                word_embedding_sequence.push_back(topic_embeddings.row(vocabulary_map[stripped]));
+            }
+        }
+    }
+    Eigen::MatrixXd document_matrix(word_embedding_sequence.size(), n_topics);
+    for (int row = 0, stop = word_embedding_sequence.size(); row < stop; ++row) {
+        document_matrix.row(row) = word_embedding_sequence[row].array().exp();
+    }
+    return document_matrix;
+}
+
+
 int
 main(int argc, char* argv[])
 {
+    Eigen::MatrixXd l = readTopicEmbeddings("final.beta", "duc2002-mf0-stop20.vocab", "duc-test.txt");
+    std::cout << "All together?\n";
+    std::cout << l.rowwise().sum();
+    std::cout << "\n\n";
+    std::cout << l << "\n";
+
+
+
+
+    return 0;
+
     const std::unordered_map<std::string, SampleType> map = {
         {"curve", SampleType::curve},
-        {"deriv",  SampleType::deriv},
+        {"deriv", SampleType::deriv},
         {"both",  SampleType::both}
     };
     args::ArgumentParser parser("", "");
