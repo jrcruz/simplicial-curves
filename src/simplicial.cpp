@@ -45,6 +45,25 @@ printMatrix(const std::string& outpath, const Eigen::MatrixXd& matrix)
 }
 
 
+std::vector<std::string>
+splitOnPunct(const std::string& word)
+{
+    std::vector<std::string> split_vector;
+    std::string tmp;
+    for (char c : word) {
+        if (std::ispunct(c) != 0) {
+            split_vector.emplace_back(tmp);
+            tmp.clear();
+        }
+        else {
+            tmp.push_back(std::tolower(c));
+        }
+    }
+    split_vector.emplace_back(tmp);
+    return split_vector;
+}
+
+
 // Read the XML document given by <path> and return a tuple with a list of
 // strings (words), all in in lowercase and without punctuation, and a
 // dictionary of (word, position), indicating the position of 'word' in the
@@ -80,35 +99,27 @@ readXmlDocument(const std::string& path)
     int vocab_size = -1; // To ensure index starts at 0.
     std::unordered_map<std::string, int> vocab;
     std::vector<std::string> text_document;
-    std::string word;
+    std::string raw_word;
 
     // [ vocab_size := w/e
-    // ; word  := w/e
+    // ; raw_word  := w/e
     // ; vocab := mapping f(w) = i where w is a lower case word or digit
     //            and i is its index in the vocabulary
     // ; text_document := w_1,...,w_n, where w_i is a lower case word or digit ]
-    while (text_stream >> word) {
-        // [ word := word with all upper case letters replaced by their lower case equivalents ]
-        std::transform(word.begin(), word.end(), word.begin(),
-                       [](char c) { return std::tolower(c); });
+    while (text_stream >> raw_word) {
+        for (std::string word : splitOnPunct(raw_word)) {
+            // [ vocab[word] does not exists -> vocab_size := vocab_size + 1
+            // | else -> I ]
+            if (vocab.find(word) == vocab.end()) {
+                ++vocab_size;
+            }
 
-        // [ word := word with only numbers or lower case letters ]
-        word.erase(std::remove_if(word.begin(),
-                                  word.end(),
-                                  [](char c) { return std::isalnum(c) == 0; }),
-                   word.end());
-
-        // [ vocab[word] does not exists -> vocab_size := vocab_size + 1
-        // | else -> I ]
-        if (vocab.find(word) == vocab.end()) {
-            ++vocab_size;
+            // [ vocab := vocab U (word, vocab_size)
+            // ; text_document := text_document ++ word, where ++ is vector append
+            // ; word := empty ]
+            vocab[word] = vocab_size;
+            text_document.emplace_back(std::move(word));
         }
-
-        // [ vocab := vocab U (word, vocab_size)
-        // ; text_document := text_document ++ word, where ++ is vector append
-        // ; word := empty ]
-        vocab[word] = vocab_size;
-        text_document.emplace_back(std::move(word));
     }
 
     return {text_document, vocab};
@@ -434,26 +445,6 @@ countDimensions(const std::string& filename)
 }
 
 
-
-std::vector<std::string>
-splitOnPunct(const std::string& word)
-{
-    std::vector<std::string> split_vector;
-    std::string tmp;
-    for (char c : word) {
-        if (std::ispunct(c) != 0) {
-            split_vector.emplace_back(tmp);
-            tmp.clear();
-        }
-        else {
-            tmp.push_back(std::tolower(c));
-        }
-    }
-    split_vector.emplace_back(tmp);
-    return split_vector;
-}
-
-
 Eigen::MatrixXd
 readTopicEmbeddings(const std::string& matrix_pathname,
                     const std::string& vocab_pathname,
@@ -475,7 +466,6 @@ readTopicEmbeddings(const std::string& matrix_pathname,
         std::vector<std::string> row_values = split(row_string, ' ');
         std::cout << row_values.size() << "\n";
 
-        // Skip over the first element since it's just whitespace.
         for (int column = 0; column < n_words; ++column) {
             topic_embeddings(row, column) = std::stod(row_values[column]);
         }
@@ -504,9 +494,9 @@ readTopicEmbeddings(const std::string& matrix_pathname,
     while (document_file >> doc_word) {
         for (const std::string& stripped : splitOnPunct(doc_word)) {
             // Only add pruned words
-            std::cout << "Found " << stripped << "\n";
-            if (vocabulary_map.find(stripped) != vocabulary_map.end()) {
-                std::cout << "'" << stripped << "' is in the vocabulary\n";
+            // std::cout << "Found " << stripped << "\n";
+            if (vocabulary_map.find(stripped) != vocabulary_map.cend()) {
+                // std::cout << "'" << stripped << "' is in the vocabulary\n";
                 word_embedding_sequence.push_back(topic_embeddings.row(vocabulary_map[stripped]));
             }
         }
@@ -514,7 +504,9 @@ readTopicEmbeddings(const std::string& matrix_pathname,
     Eigen::MatrixXd document_matrix(word_embedding_sequence.size(), n_topics);
     for (int row = 0, stop = word_embedding_sequence.size(); row < stop; ++row) {
         document_matrix.row(row) = word_embedding_sequence[row].array().exp();
+        document_matrix.row(row) /= document_matrix.row(row).sum();
     }
+
     return document_matrix;
 }
 
@@ -522,35 +514,38 @@ readTopicEmbeddings(const std::string& matrix_pathname,
 int
 main(int argc, char* argv[])
 {
-    Eigen::MatrixXd l = readTopicEmbeddings("final.beta", "duc2002-mf0-stop20.vocab", "duc-test.txt");
-    std::cout << "All together?\n";
-    std::cout << l.rowwise().sum();
-    std::cout << "\n\n";
-    std::cout << l << "\n";
-
-
-
-
-    return 0;
-
     const std::unordered_map<std::string, SampleType> map = {
         {"curve", SampleType::curve},
         {"deriv", SampleType::deriv},
         {"both",  SampleType::both}
     };
+    //                                     Optional
+    //                         Args +--------------------+
+    //                          +                        |
+    //                          |                        +-+ σ
+    //                          |                        |
+    //            +-------------+                        +-+ c
+    //            |             |                        |
+    //         All|or none      |    One of each         +-+ s
+    //      +------------+      +-------+---------+      |
+    //      |            |              |         |      +-+ n
+    //      +            +              +         +      |
+    // Vocabulary   LDA-matrix   Sample-type   Filepath  +-+ kernel
     args::ArgumentParser parser("", "");
     args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
 
     args::Group all_group(parser, "Required options", args::Group::Validators::All);
-    args::ValueFlag<std::string> filename_p(all_group, "xml file", "Path to an XML file with the document to analyse", {'f', "filepath"});
+    args::ValueFlag<std::string> filename_p(all_group, "document", "Path to a document to analyse. This can be a simple text file or an XML file", {'f', "filepath"});
     args::MapFlag<std::string, SampleType> sample_type_p(all_group, "sample type", "Type of sampling to do. 'curve' outputs the document curve only. 'deriv' outputs the gradient only. 'both' outputs both", {"sp", "sample-type"}, map);
+
+    args::Group lda_file_group(parser, "LDA file", args::Group::Validators::AllOrNone);
+    args::ValueFlag<std::string> matrix_file_p(lda_file_group, "matrix file", "Topic x Word matrix from LDA", {"matrix"});
+    args::ValueFlag<std::string> vocab_file_p(lda_file_group, "vocabulary file", "Vocabulary file given as input to LDA (one word per line)", {"vocab"});
 
     args::ValueFlag<double> c_smoothing_p(parser, "categorical smoothing", "The amount of categorical smoothing to apply. Default is 0.1", {'c', "cat"});
     args::ValueFlag<double> k_smoothing_p(parser, "kernel smoothing", "The amount of kernel smoothing to apply. Default is 0.1", {'s', "sigma"});
-
     args::ValueFlag<int> sample_points_p(parser, "number of sample points", "The number of points to sample from the curve. Default is 100", {'n', "sample-number"});
     args::ValueFlag<int> integral_points_p(parser, "number of integral points", "The amount of points to use in integral calculations. Default is 50", {'i', "integral-points"});
-
     args::Flag use_beta(parser, "use beta", "Use beta kernel instead of gaussian kernel for curve smoothing", {"use-beta"});
 
     try {
@@ -565,7 +560,8 @@ main(int argc, char* argv[])
         std::exit(1);
     }
     catch (args::ValidationError&) {
-        std::cout << "Both '--filepath' and --sample-type are required arguments. Exiting\n";
+        std::cout << "Both '--filepath' and --sample-type are required arguments.\n";
+        std::cout << "If you are using LDA then you must provide both --matrix and --vocab. Exiting.\n";
         std::exit(1);
     }
     catch (args::ParseError& e) {
@@ -595,10 +591,18 @@ main(int argc, char* argv[])
         std::exit(1);
     }
 
-    const auto [document, vocab] = readXmlDocument(filepath);
-    std::cout << "Document size: "       << document.size()
-              << " -- Vocabulary size: " << vocab.size() << '\n';
-    Eigen::MatrixXd document_matrix = makeMatrixRepresentation(document, vocab, c_smoothing);
+    Eigen::MatrixXd document_matrix = matrix_file_p and vocab_file_p
+                                    ? readTopicEmbeddings(args::get(matrix_file_p),
+                                                          args::get(vocab_file_p),
+                                                          filepath)
+                                    : [c_smoothing, &filepath] {
+            const auto [document, vocab] = readXmlDocument(filepath);
+            return makeMatrixRepresentation(document, vocab, c_smoothing);
+        }();
+
+    const int vocab_size = document_matrix.cols();
+    std::cout << "Word sequence size: " << document_matrix.rows()
+              << " -- Dimension size: " << vocab_size << '\n';
     auto curve_function = makeCurve(document_matrix, sigma, int_points, kernel_func);
 
     std::stringstream outfile_name;
@@ -610,14 +614,14 @@ main(int argc, char* argv[])
         std::cout << "Curve:\n";
         Eigen::MatrixXd curve = sampleCurveDistribution(curve_function,
                                                         sample_points,
-                                                        vocab.size());
+                                                        vocab_size);
         printMatrix(outfile_name.str() + "_curve.txt", curve);
     }
     if (sample_type == SampleType::deriv or sample_type == SampleType::both) {
         std::cout << "Derivative:\n";
         Eigen::MatrixXd deriv = computeCurveDerivative(curve_function,
                                                        sample_points,
-                                                       vocab.size());
+                                                       vocab_size);
         Eigen::VectorXd deriv_norm = deriv.rowwise().norm();
         printMatrix(outfile_name.str() + "_deriv.txt", deriv);
         printMatrix(outfile_name.str() + "_dnorm.txt", deriv_norm);
