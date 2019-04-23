@@ -96,28 +96,34 @@ readXmlDocument(const std::string& path)
     text_stream << xml_document.child("DOC").child("TEXT").child_value();
 
     // [ vocab_size, vocab, text_document, word := -1, empty, empty, empty ]
-    int vocab_size = -1; // To ensure index starts at 0.
+    int vocab_size = 0; // To ensure index starts at 0.
     std::unordered_map<std::string, int> vocab;
     std::vector<std::string> text_document;
     std::string raw_word;
 
     // [ vocab_size := w/e
-    // ; raw_word  := w/e
+    // ; raw_word   := w/e
     // ; vocab := mapping f(w) = i where w is a lower case word or digit
     //            and i is its index in the vocabulary
     // ; text_document := w_1,...,w_n, where w_i is a lower case word or digit ]
     while (text_stream >> raw_word) {
         for (std::string word : splitOnPunct(raw_word)) {
+            // Found punctuation at the end of a word.
+            if (word.empty()) {
+                continue;
+            }
+            std::cout << "Read word '" << word << "'\n";
             // [ vocab[word] does not exists -> vocab_size := vocab_size + 1
             // | else -> I ]
             if (vocab.find(word) == vocab.end()) {
+                std::cout << "Word wasn't in the vocabulary. New size is ";
+                vocab[word] = vocab_size;
                 ++vocab_size;
+                std::cout << vocab_size << "\n";
             }
 
-            // [ vocab := vocab U (word, vocab_size)
-            // ; text_document := text_document ++ word, where ++ is vector append
+            // [ text_document := text_document ++ word, where ++ is vector append
             // ; word := empty ]
-            vocab[word] = vocab_size;
             text_document.emplace_back(std::move(word));
         }
     }
