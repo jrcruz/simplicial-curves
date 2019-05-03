@@ -7,10 +7,10 @@ src/%.o: src/%.cpp
 all: bin/run_lda.exe bin/run_laplace.exe
 
 bin/run_lda.exe: src/run_lda.o
-	$(CXX) -o $@ $^
+	$(CXX) -o $@ $^ -lpugixml
 
 bin/run_laplace.exe: src/run_laplace.o
-	$(CXX) -o $@ $^
+	$(CXX) -o $@ $^ -lpugixml
 
 clean:
 	$(RM) bin/*.exe src/*.o

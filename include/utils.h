@@ -13,17 +13,12 @@
 #include <fstream>
 
 #include "args/args.hxx"
-#include "pugixml/pugixml.cpp"
 
 #include <Eigen/Eigen>
 
 #include <boost/math/distributions/normal.hpp>
 #include <boost/math/distributions/beta.hpp>
 #include <boost/math/quadrature/trapezoidal.hpp>
-
-enum class SampleType : char {
-  curve, deriv, both
-};
 
 // Print the rows of a matrix separated by ',' and the columns by '\n'.
 inline void printMatrix(const std::string& outpath, const Eigen::MatrixXd& matrix) {

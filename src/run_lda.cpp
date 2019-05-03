@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "document.h"
+#include "sample_type.h"
 
 namespace {
   std::string filepath;
