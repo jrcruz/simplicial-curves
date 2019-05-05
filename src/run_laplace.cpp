@@ -1,12 +1,11 @@
 #include <boost/program_options.hpp>
 #include "utils.h"
+#include "kernels.h"
 #include "document.h"
-#include "sample_type.h"
 
 namespace {
   std::string filepath;
-  std::string sample_type_name = "both";
-  SampleType sample_type;
+  std::string sample_type = "both";
   double c_smoothing = 0.1, sigma = 0.1;
   int int_points = 50, sample_points = 100;
   bool use_beta = false;
@@ -17,9 +16,8 @@ namespace {
     ("help,h", "Display this help menu") //
     ("filepath,f", boost::program_options::value < std::string > (&filepath),
      "Document to analyse (plain text or XML file) [required]") //
-    ("sample-type,t",
-     boost::program_options::value < std::string > (&sample_type_name),
-     "Type of sampling to do: 'curve' outputs the document curve only; 'deriv' outputs the gradient only; 'both' outputs both [both]") //
+    ("sample-type,t", boost::program_options::value < std::string > (&sample_type),
+     "Sampling type: 'curve' outputs the document curve; 'gradient' outputs the gradient (derivative); 'both' outputs both [both]") //
     ("use-beta,b", "Use Beta kernel instead of Gaussian kernel for curve smoothing [use Gaussian]") //
     ("cat,c", boost::program_options::value<double>(&c_smoothing), "Amount of categorical smoothing to apply [0.1]") //
     ("sigma,s", boost::program_options::value<double>(&sigma), "Amount of kernel smoothing to apply [0.1]") //
@@ -45,23 +43,17 @@ namespace {
       exit(1);
     }
 
-    if (sample_type_name == "curve")
-      sample_type = SampleType::curve;
-    else if (sample_type_name == "deriv")
-      sample_type = SampleType::deriv;
-    else if (sample_type_name == "both")
-      sample_type = SampleType::both;
-    else {
-      std::cerr << "Sample type must be one of 'curve', 'deriv' or 'both'. Exiting\n";
+    if (!(sample_type == "curve" || sample_type == "gradient" || sample_type == "both")) {
+      std::cerr << "Sample type must be one of 'curve', 'gradient', or 'both'." << std::endl;
       std::exit(1);
     }
 
     if (sigma <= 0.0) {
-      std::cerr << "Sigma should be larger than 0. Exiting.\n";
+      std::cerr << "Sigma must be positive." << std::endl;
       std::exit(1);
     }
     if (c_smoothing < 0.0) {
-      std::cerr << "Categorical smoothing amount can't be negative. Exiting\n";
+      std::cerr << "Categorical smoothing amount must not be negative." << std::endl;
       std::exit(1);
     }
 
@@ -73,27 +65,26 @@ int main(int argc, const char* argv[]) {
 
   parse_options(argc, argv);
 
-  auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
-
   document d(filepath, c_smoothing);
-
   std::cout << "Word sequence size: " << d.length() << " -- Dimension size: " << d.vocab_size() << '\n';
+
+  auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
   d.makeCurveFunction(sigma, int_points, kernel_func);
 
   std::stringstream outfile_name;
   outfile_name << getFileName(filepath) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
 
-  if (sample_type == SampleType::curve or sample_type == SampleType::both) {
+  if (sample_type == "curve" or sample_type == "both") {
     std::cout << "Curve:\n";
     Eigen::MatrixXd curve = d.sampleCurveDistribution(sample_points);
-    printMatrix(outfile_name.str() + "_curve.txt", curve);
+    lax::write_matrix(curve, outfile_name.str() + "_curve.txt", ',');
   }
-  if (sample_type == SampleType::deriv or sample_type == SampleType::both) {
+  if (sample_type == "gradient" or sample_type == "both") {
     std::cout << "Derivative:\n";
     Eigen::MatrixXd deriv = d.computeCurveDerivative(sample_points);
     Eigen::VectorXd deriv_norm = deriv.rowwise().norm();
-    printMatrix(outfile_name.str() + "_deriv.txt", deriv);
-    printMatrix(outfile_name.str() + "_dnorm.txt", deriv_norm);
+    lax::write_matrix(deriv, outfile_name.str() + "_deriv.txt", ',');
+    lax::write_matrix(deriv_norm, outfile_name.str() + "_dnorm.txt", ',');
   }
 }
 

@@ -1,4 +1,4 @@
-INC := -Isrc -Iinclude/ -I/usr/include/eigen3
+INC := -Isrc -Iinclude/ -I/usr/include/eigen3 -I../lax
 CXXFLAGS = -O3 -g -Wno-int-in-bool-context -Wall -Wextra 
 
 src/%.o: src/%.cpp
