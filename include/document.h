@@ -202,7 +202,7 @@ double lengthNormalization(double time, int word) const {
 // differences between consecutive distributions (points on the curve). The
 // number of sample points used is given by <curve_sample_points>. Naturally,
 // the higher the sample points the more precise the approximation will be.
-Eigen::MatrixXd computeCurveDerivative(int sample_points) {
+Eigen::MatrixXd compute_derivative(int sample_points) {
   constexpr double h = 1e-7;
   Eigen::MatrixXd derivative = Eigen::MatrixXd::Zero(sample_points, vocab_size());
   for (int j = 0; j < sample_points; ++j) {
@@ -245,7 +245,7 @@ void makeCurveFunction(double sigma, int integral_points, kernel_type kernel_fun
 
 // Construct a discrete representation of the document curve by sampling the
 // <curve_function> at uniform length <curve_sample_points>.
-Eigen::MatrixXd sampleCurveDistribution(int sample_points) {
+Eigen::MatrixXd compute_curve(int sample_points) {
   Eigen::MatrixXd sampled_curve = Eigen::MatrixXd::Zero(sample_points + 1, vocab_size());
   for (int mu = 0; mu < sample_points + 1; ++mu) {
     std::cout << "\rAt " << mu << " of " << sample_points << " points";

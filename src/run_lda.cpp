@@ -91,12 +91,11 @@ int main(int argc, const char* argv[]) {
 
   if (sample_type == "curve" or sample_type == "both") {
     std::cout << "Curve:\n";
-    Eigen::MatrixXd curve = d.sampleCurveDistribution(sample_points);
-    lax::write_matrix(curve, outfile_name.str() + "_curve.txt", ',');
+    lax::write_matrix(d.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
   }
   if (sample_type == "gradient" or sample_type == "both") {
     std::cout << "Derivative:\n";
-    Eigen::MatrixXd deriv = d.computeCurveDerivative(sample_points);
+    Eigen::MatrixXd deriv = d.compute_derivative(sample_points);
     Eigen::VectorXd deriv_norm = deriv.rowwise().norm();
     lax::write_matrix(deriv, outfile_name.str() + "_deriv.txt", ',');
     lax::write_matrix(deriv_norm, outfile_name.str() + "_dnorm.txt", ',');
