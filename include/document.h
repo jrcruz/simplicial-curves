@@ -6,7 +6,9 @@
 #include <string>
 #include <vector>
 #include "utils.h"
+#include "kernels.h"
 #include "pugixml.hpp"
+#include <lax/basic_functions_io.h>
 
 class document {
 
@@ -64,7 +66,7 @@ private:
     // [ vocab_size, vocab, text_document, word := -1, empty, empty, empty ]
     int vocab_size = 0; // To ensure index starts at 0.
     std::unordered_map<std::string, int> vocab;
-    std::vector < std::string > text_document;
+    std::vector<std::string> text_document;
     std::string raw_word;
 
     // [ vocab_size := w/e
@@ -99,42 +101,9 @@ private:
   }
 
 private:
-  // LDA READER FUNCTIONS
-
-  // Return the dimensions of a matrix stored in 'filename'. First element of the
-  // pair is the number of rows and the second element is the number of columns.
-  std::pair<int, int> countDimensions(const std::string& filename) {
-    std::ifstream input_file(filename);
-    int rows = 0;
-    int columns = 0;
-    bool in_first_line = true;
-    // [ input_file reached eof -> I
-    // | else -> rows    := number of rows in the file + 1
-    //           columns := number of spaces between numbers in a row
-    //           in_first_line := w/e ]
-    while (not input_file.eof()) {
-      char c;
-      input_file.get(c);
-      // Reached the end of the last row, so we don't need to keep counting
-      // spaces.
-      if (c == '\n') {
-        in_first_line = false;
-        ++rows;
-      } else if (c == ' ' and in_first_line) {
-        ++columns;
-      }
-    }
-    // Subtract 1 from rows because we extract '\n' again when we reach eof, so
-    // the last newline is counted twice. Add 1 to columns because we were
-    // counting spaces between columns.
-    return {rows - 1, columns + 1};
-  }
-
-private:
-  // COMMON FUNCTIONS
 
   std::vector<std::string> splitOnPunct(const std::string& word) {
-    std::vector < std::string > split_vector;
+    std::vector<std::string> split_vector;
     std::string tmp;
     for (char c : word) {
       if (std::ispunct(c) != 0) {
@@ -179,30 +148,12 @@ public:
  * LDA reader.
  */
 document(const std::string& matrix_pathname, const std::string& vocab_pathname, const std::string& document_pathname) {
-  // [ n_topics := number of rows in the matrix;
-  //   n_words  := number of columns in the matrix ]
-  const auto [n_topics, n_words] = countDimensions(matrix_pathname);
-  std::ifstream matrix_file(matrix_pathname);
-
-  // [ topic_embeddings := topic x word matrix, where each row is the
-  //                       log-distribution of the topic through the vocabulary ]
-  Eigen::MatrixXd topic_embeddings(n_topics, n_words);
-  for (int row = 0; row < n_topics; ++row) {
-    // [ row_string := row in matrix_file (everything until \n);
-    //   row_values := n_words+1 sized vector with each individual row value ]
-    std::string row_string;
-    std::getline(matrix_file, row_string);
-    std::vector < std::string > row_values = split(row_string, ' ');
-    std::cout << row_values.size() << "\n";
-
-    for (int column = 0; column < n_words; ++column) {
-      topic_embeddings(row, column) = std::stod(row_values[column]);
-    }
-  }
-  // [ topic_embeddings := topic_embeddings^T (word x topic matrix), where
+  // [ topic_embeddings := topic_embeddings (word x topic matrix), where
   //                       each row is the embedding in the topic space for
   //                       the word ]
+  Eigen::MatrixXd topic_embeddings = lax::read_matrix(matrix_pathname, ' ');
   topic_embeddings.transposeInPlace();
+  size_t n_topics = topic_embeddings.cols();
 
   // Load entire lexicon (only the words that have a corresponding word embedding)
   // [ vocabulary_map := word -> N mapping, from the string to the words' index in the vocabulary ]
@@ -217,7 +168,7 @@ document(const std::string& matrix_pathname, const std::string& vocab_pathname, 
 
   // Read the original file and map each word to its corresponding embedding
   // (using the lexicon to index the embedding matrix)
-  std::vector < Eigen::VectorXd > word_embedding_sequence;
+  std::vector<Eigen::VectorXd> word_embedding_sequence;
   std::ifstream document_file(document_pathname);
   std::string doc_word;
   while (document_file >> doc_word) {
@@ -230,13 +181,12 @@ document(const std::string& matrix_pathname, const std::string& vocab_pathname, 
       }
     }
   }
-  Eigen::MatrixXd document_matrix(word_embedding_sequence.size(), n_topics);
-  for (int row = 0, stop = word_embedding_sequence.size(); row < stop; ++row) {
-    document_matrix.row(row) = word_embedding_sequence[row].array().exp();
-    document_matrix.row(row) /= document_matrix.row(row).sum();
-  }
 
-  _document = document_matrix;
+  _document = Eigen::MatrixXd::Zero(word_embedding_sequence.size(), n_topics);
+  for (size_t row = 0; row < word_embedding_sequence.size(); ++row) {
+    _document.row(row) = word_embedding_sequence[row].array().exp();
+    _document.row(row) /= _document.row(row).sum();
+  }
 }
 
 // Normalize the document length to be in the interval [0, 1]. This abstracts
@@ -248,26 +198,11 @@ double lengthNormalization(double time, int word) const {
   return _document(ceiled_time_index, word);
 }
 
-// Integrate <func> between <begin> and <end> using the trapezoidal method
-// (https://en.wikipedia.org/wiki/Trapezoidal_rule) and number <points> of
-// interval sections.
-template<typename Function>
-double trapIntegrate(Function func, double begin, double end, int points) {
-  const double step = (end - begin) / points;
-  const double at_begin = func(begin) / 2.0;
-  double middle = 0.0;
-  for (int j = 1; j < points; ++j) {
-    middle += func(begin + j * step);
-  }
-  const double at_end = func(end) / 2.0;
-  return step * (at_begin + middle + at_end);
-}
-
 // Approximate the derivative of the curve by computing the central
 // differences between consecutive distributions (points on the curve). The
 // number of sample points used is given by <curve_sample_points>. Naturally,
 // the higher the sample points the more precise the approximation will be.
-Eigen::MatrixXd computeCurveDerivative(int sample_points) {
+Eigen::MatrixXd compute_derivative(int sample_points) {
   constexpr double h = 1e-7;
   Eigen::MatrixXd derivative = Eigen::MatrixXd::Zero(sample_points, vocab_size());
   for (int j = 0; j < sample_points; ++j) {
@@ -283,8 +218,7 @@ Eigen::MatrixXd computeCurveDerivative(int sample_points) {
 // in the document) and returns a distribution over words at that <mu>,
 // properly smoothed with the provided <sigma> value and integral-sampled
 // using number <integral_point> of integral approximation points.
-template<typename Function>
-void makeCurveFunction(double sigma, int integral_points, Function kernel_func) {
+void makeCurveFunction(double sigma, int integral_points, kernel_type kernel_func) {
   // [ return := f :: Real -> Real^vocab_size, where f(μ) = distribution ]
   _curve = [=](double mu) -> Eigen::RowVectorXd {
     // [ μ < 0 or μ > 1 -> return := empty distribution
@@ -302,7 +236,7 @@ void makeCurveFunction(double sigma, int integral_points, Function kernel_func) 
           return lengthNormalization(time, word) * kernel_func(time, mu, sigma);
         };
         // [ distribution[word] := integral_0^1 ϕ_t,w * K_μ,σ(t) dt ]
-        distribution[word] = trapIntegrate(integrand, 0, 1, integral_points);
+        distribution[word] = trapezoidal_integral(integrand, 0, 1, integral_points);
       }
 
       return distribution;
@@ -311,7 +245,7 @@ void makeCurveFunction(double sigma, int integral_points, Function kernel_func) 
 
 // Construct a discrete representation of the document curve by sampling the
 // <curve_function> at uniform length <curve_sample_points>.
-Eigen::MatrixXd sampleCurveDistribution(int sample_points) {
+Eigen::MatrixXd compute_curve(int sample_points) {
   Eigen::MatrixXd sampled_curve = Eigen::MatrixXd::Zero(sample_points + 1, vocab_size());
   for (int mu = 0; mu < sample_points + 1; ++mu) {
     std::cout << "\rAt " << mu << " of " << sample_points << " points";
@@ -328,7 +262,7 @@ Eigen::MatrixXd sampleCurveDistribution(int sample_points) {
 // an infinite number of distributions, we integrate them.
 double curveEntropy(int integral_points) {
   // [ return := Int_0^1 H(γ(μ)) dμ ]
-  return trapIntegrate([this](double mu) {return entropy(_curve(mu));}, 0, 1, integral_points);
+  return trapezoidal_integral([this](double mu) {return entropy(_curve(mu));}, 0, 1, integral_points);
 }
 
 int vocab_size() const {
@@ -348,7 +282,7 @@ int length() const {
 // (which is what happens) then consider the word to be the floor of mu * N
 // (since we consider the ceil for the normalization mapping, thus erring
 // upward -- this way we err downward and _somehow_ compensate).
-inline int revertNormalization(double norm_time) {
+int revertNormalization(double norm_time) {
   return std::floor(norm_time * (length() - 1));
 }
 

@@ -1,129 +1,89 @@
+#include <boost/program_options.hpp>
 #include "utils.h"
+#include "kernels.h"
 #include "document.h"
-#include "sample_type.h"
 
 namespace {
   std::string filepath;
-  SampleType sample_type;
-  double c_smoothing;
-  double sigma;
-  int int_points;
-  int sample_points;
-  bool use_beta;
-  std::string matrix_file, vocab_file;
-}
+  std::string sample_type = "both";
+  double c_smoothing = 0.1, sigma = 0.1;
+  int int_points = 50, sample_points = 100;
+  bool use_beta = false;
 
-auto parse_args(int argc, char* argv[]) {
+  void parse_options(int argc, const char *argv[]) {
+    boost::program_options::options_description desc("Allowed options");
+    desc.add_options() //
+    ("help,h", "Display this help menu") //
+    ("filepath,f", boost::program_options::value < std::string > (&filepath),
+     "Document to analyse (plain text or XML file) [required]") //
+    ("sample-type,t", boost::program_options::value < std::string > (&sample_type),
+     "Sampling type: 'curve' outputs the document curve; 'gradient' outputs the gradient (derivative); 'both' outputs both [both]") //
+    ("use-beta,b", "Use Beta kernel instead of Gaussian kernel for curve smoothing [use Gaussian]") //
+    ("cat,c", boost::program_options::value<double>(&c_smoothing), "Amount of categorical smoothing to apply [0.1]") //
+    ("sigma,s", boost::program_options::value<double>(&sigma), "Amount of kernel smoothing to apply [0.1]") //
+    ("sample-number,n", boost::program_options::value<int>(&sample_points), "Number of points to sample from the curve [100]") //
+    ("integral-points,i", boost::program_options::value<int>(&int_points), "Number of points to use in integral calculations [50]");
 
-  const std::unordered_map<std::string, SampleType> map = { //
-      { "curve", SampleType::curve }, //
-          { "deriv", SampleType::deriv }, //
-          { "both", SampleType::both } //
-      };
-  //                                     Optional
-  //                         Args +--------------------+
-  //                          +                        |
-  //                          |                        +-+ σ
-  //                          |                        |
-  //            +-------------+                        +-+ c
-  //            |             |                        |
-  //         All|or none      |    One of each         +-+ s
-  //      +------------+      +-------+---------+      |
-  //      |            |              |         |      +-+ n
-  //      +            +              +         +      |
-  // Vocabulary   LDA-matrix   Sample-type   Filepath  +-+ kernel
-  args::ArgumentParser parser("", "");
-  args::HelpFlag help(parser, "help", "Display this help menu", { 'h', "help" });
+    boost::program_options::variables_map vm;
+    boost::program_options::store(parse_command_line(argc, argv, desc), vm);
+    notify(vm);
 
-  args::Group all_group(parser, "Required options", args::Group::Validators::All);
-  args::ValueFlag < std::string
-      > filename_p(all_group, "document", "Path to a document to analyse. This can be a simple text file or an XML file", { 'f',
-                       "filepath" });
-  args::MapFlag < std::string, SampleType
-      > sample_type_p(
-          all_group, "sample type",
-          "Type of sampling to do. 'curve' outputs the document curve only. 'deriv' outputs the gradient only. 'both' outputs both",
-          { "sp", "sample-type" }, map);
+    if (vm.count("help")) {
+      std::cerr << desc << std::endl;
+      exit(0);
+    }
 
-  args::Group lda_file_group(parser, "LDA file", args::Group::Validators::AllOrNone);
-  args::ValueFlag < std::string > matrix_file_p(lda_file_group, "matrix file", "Topic x Word matrix from LDA", { "matrix" });
-  args::ValueFlag < std::string
-      > vocab_file_p(lda_file_group, "vocabulary file", "Vocabulary file given as input to LDA (one word per line)", { "vocab" });
+    if (vm.count("use-beta")) {
+      use_beta = true;
+    }
 
-  args::ValueFlag<double> c_smoothing_p(parser, "categorical smoothing",
-                                        "The amount of categorical smoothing to apply. Default is 0.1", { 'c', "cat" });
-  args::ValueFlag<double> k_smoothing_p(parser, "kernel smoothing", "The amount of kernel smoothing to apply. Default is 0.1", {
-                                            's', "sigma" });
-  args::ValueFlag<int> sample_points_p(parser, "number of sample points",
-                                       "The number of points to sample from the curve. Default is 100", { 'n', "sample-number" });
-  args::ValueFlag<int> integral_points_p(parser, "number of integral points",
-                                         "The amount of points to use in integral calculations. Default is 50", { 'i',
-                                             "integral-points" });
-  args::Flag use_beta(parser, "use beta", "Use beta kernel instead of gaussian kernel for curve smoothing", { "use-beta" });
+    if (!vm.count("filepath")) {
+      std::cerr << "Document file was not specified" << std::endl;
+      std::cerr << desc << std::endl;
+      exit(1);
+    }
 
-  try {
-    parser.ParseCLI(argc, argv);
-  } catch (args::Help&) {
-    std::cout << parser;
-    std::exit(0);
-  } catch (args::MapError&) {
-    std::cout << "Sample type must be one of 'curve', 'deriv' or 'both'. Exiting\n";
-    std::exit(1);
-  } catch (args::ValidationError&) {
-    std::cout << "Both '--filepath' and --sample-type are required arguments.\n";
-    std::cout << "If you are using LDA then you must provide both --matrix and --vocab. Exiting.\n";
-    std::exit(1);
-  } catch (args::ParseError& e) {
-    std::cout << e.what() << '\n';
-    std::exit(1);
+    if (!(sample_type == "curve" || sample_type == "gradient" || sample_type == "both")) {
+      std::cerr << "Sample type must be one of 'curve', 'gradient', or 'both'." << std::endl;
+      std::exit(1);
+    }
+
+    if (sigma <= 0.0) {
+      std::cerr << "Sigma must be positive." << std::endl;
+      std::exit(1);
+    }
+    if (c_smoothing < 0.0) {
+      std::cerr << "Categorical smoothing amount must not be negative." << std::endl;
+      std::exit(1);
+    }
+
   }
 
-  filepath = args::get(filename_p);
-  if (matrix_file_p) matrix_file = args::get(matrix_file_p);
-  if (vocab_file_p) vocab_file = args::get(vocab_file_p);
+} // anonymous namespace
 
-  sample_type = args::get(sample_type_p);
-  c_smoothing = c_smoothing_p ? args::get(c_smoothing_p) : 0.1;
-  sigma = k_smoothing_p ? args::get(k_smoothing_p) : 0.1;
-  int_points = integral_points_p ? args::get(integral_points_p) : 50;
-  sample_points = sample_points_p ? args::get(sample_points_p) : 100;
+int main(int argc, const char* argv[]) {
 
-  if (sigma <= 0.0) {
-    std::cerr << "Sigma should be larger than 0. Exiting.\n";
-    std::exit(1);
-  }
-  if (c_smoothing < 0.0) {
-    std::cerr << "Categorical smoothing amount can't be negative. Exiting\n";
-    std::exit(1);
-  }
-
-}
-
-int main(int argc, char* argv[]) {
-
-  parse_args(argc, argv);
-
-  auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
+  parse_options(argc, argv);
 
   document d(filepath, c_smoothing);
-
   std::cout << "Word sequence size: " << d.length() << " -- Dimension size: " << d.vocab_size() << '\n';
+
+  auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
   d.makeCurveFunction(sigma, int_points, kernel_func);
 
   std::stringstream outfile_name;
   outfile_name << getFileName(filepath) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
 
-  if (sample_type == SampleType::curve or sample_type == SampleType::both) {
+  if (sample_type == "curve" or sample_type == "both") {
     std::cout << "Curve:\n";
-    Eigen::MatrixXd curve = d.sampleCurveDistribution(sample_points);
-    printMatrix(outfile_name.str() + "_curve.txt", curve);
+    lax::write_matrix(d.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
   }
-  if (sample_type == SampleType::deriv or sample_type == SampleType::both) {
+  if (sample_type == "gradient" or sample_type == "both") {
     std::cout << "Derivative:\n";
-    Eigen::MatrixXd deriv = d.computeCurveDerivative(sample_points);
+    Eigen::MatrixXd deriv = d.compute_derivative(sample_points);
     Eigen::VectorXd deriv_norm = deriv.rowwise().norm();
-    printMatrix(outfile_name.str() + "_deriv.txt", deriv);
-    printMatrix(outfile_name.str() + "_dnorm.txt", deriv_norm);
+    lax::write_matrix(deriv, outfile_name.str() + "_deriv.txt", ',');
+    lax::write_matrix(deriv_norm, outfile_name.str() + "_dnorm.txt", ',');
   }
 }
 
