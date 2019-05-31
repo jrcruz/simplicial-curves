@@ -80,25 +80,23 @@ int main(int argc, const char* argv[]) {
 
   parse_options(argc, argv);
 
-  document d(matrix_file, vocab_file, filepath);
-  std::cout << "Word sequence size: " << d.length() << " -- Dimension size: " << d.vocab_size() << '\n';
+  document doc(matrix_file, vocab_file, filepath);
+  std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
 
   auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
-  d.makeCurveFunction(sigma, int_points, kernel_func);
+  doc.makeCurveFunction(sigma, int_points, kernel_func);
 
   std::stringstream outfile_name;
   outfile_name << getFileName(filepath) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
 
   if (sample_type == "curve" or sample_type == "both") {
     std::cout << "Curve:\n";
-    lax::write_matrix(d.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
+    lax::write_matrix(doc.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
   }
   if (sample_type == "gradient" or sample_type == "both") {
     std::cout << "Derivative:\n";
-    Eigen::MatrixXd deriv = d.compute_derivative(sample_points);
-    Eigen::VectorXd deriv_norm = deriv.rowwise().norm();
+    Eigen::MatrixXd deriv = doc.compute_derivative(sample_points);
     lax::write_matrix(deriv, outfile_name.str() + "_deriv.txt", ',');
-    lax::write_matrix(deriv_norm, outfile_name.str() + "_dnorm.txt", ',');
   }
 }
 

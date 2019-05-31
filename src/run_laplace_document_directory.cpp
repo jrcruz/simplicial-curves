@@ -65,23 +65,30 @@ int main(int argc, const char* argv[]) {
 
   parse_options(argc, argv);
 
-  document doc(filepath, c_smoothing);
-  std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
-
   auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
-  doc.makeCurveFunction(sigma, int_points, kernel_func);
 
-  std::stringstream outfile_name;
-  outfile_name << getFileName(filepath) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
+  const std::unordered_map<std::string, int> vocab = readAllVocab(filepath);
+  std::ifstream all_paths(filepath);
+  std::string path;
+  while (all_paths >> path) {
+    document doc(path, vocab, c_smoothing);
+    std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
 
-  if (sample_type == "curve" or sample_type == "both") {
-    std::cout << "Curve:\n";
-    lax::write_matrix(doc.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
+    doc.makeCurveFunction(sigma, int_points, kernel_func);
+
+    std::stringstream outfile_name;
+    outfile_name << getFileName(doc.filename()) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
+
+    if (sample_type == "curve" or sample_type == "both") {
+      std::cout << "Curve:\n";
+      lax::write_matrix(doc.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
+    }
+    if (sample_type == "gradient" or sample_type == "both") {
+      std::cout << "Derivative:\n";
+      Eigen::MatrixXd deriv = doc.compute_derivative(sample_points);
+      lax::write_matrix(deriv, outfile_name.str() + "_deriv.txt", ',');
+    }
   }
-  if (sample_type == "gradient" or sample_type == "both") {
-    std::cout << "Derivative:\n";
-    Eigen::MatrixXd deriv = doc.compute_derivative(sample_points);
-    lax::write_matrix(deriv, outfile_name.str() + "_deriv.txt", ',');
-  }
+
 }
 
