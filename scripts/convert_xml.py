@@ -16,7 +16,7 @@ def main():
             for paragraph in text_root.findall(".//P"):
                 raw_text += paragraph.text
 
-        with open(name + "PRUNED.txt", 'w') as file:
+        with open(name + ".PRUNED.txt", 'w') as file:
             file.write(raw_text)
 
         xml_text = ""

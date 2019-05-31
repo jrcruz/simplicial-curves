@@ -6,4 +6,4 @@ import pylab as PL
 sampled_curve = loadtxt(argv[1])
 
 PL.plot(sampled_curve)
-PL.savefig(argv[1] + ".derivative.png", bbox_inches="tight")
+PL.savefig(argv[1] + ".plot.png", bbox_inches="tight")

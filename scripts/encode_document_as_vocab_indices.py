@@ -5,7 +5,6 @@ import string
 
 
 
-
 def invert(v):
     return [(y, x) for (x, y) in v]
 
@@ -23,7 +22,6 @@ def prune(word):
     if len(tmp) > 2:
         result.append("".join(tmp))
     return result
-
 
 
 def main():
