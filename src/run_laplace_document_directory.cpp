@@ -74,6 +74,11 @@ int main(int argc, const char* argv[]) {
     document doc(path, vocab, c_smoothing);
     std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
 
+    // Skip over empty documents (happens when, for example, all the words in
+    // the document are not in the vocabulary).
+    if (doc.length() == 0) {
+      continue;
+    }
     doc.makeCurveFunction(sigma, int_points, kernel_func);
 
     std::stringstream outfile_name;
