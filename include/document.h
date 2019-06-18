@@ -7,7 +7,6 @@
 #include <vector>
 #include "utils.h"
 #include "kernels.h"
-#include "pugixml.hpp"
 #include <lax/basic_functions_io.h>
 
 class document {
@@ -19,77 +18,26 @@ protected:
 
   std::function<Eigen::RowVectorXd(double)> _curve;
 
-private:
-  // FUNCTIONS USED BY LAPLACE TF CONSTRUCTOR
+private: // FUNCTIONS USED BY LAPLACE TF CONSTRUCTOR
 
   /**
-   * Read the XML document given by <path> and return a tuple with a list of
-   * strings (words), all in in lowercase and without punctuation, and a
-   * dictionary of (word, position), indicating the position of 'word' in the
-   * lexicon.
+   * Read the document given by <path> and return a vector of words, all in
+   * lowercase and without punctuation.
    */
-/*  std::vector<std::string>
-  readXmlDocument(const std::string& path, const std::unordered_map<std::string, int>& vocab) const {
-
-    // DUC provides their test documents in malformed XML, so we need to repair
-    // it to feed it to the parser.
-    // [ file := open stream to text document 'path'
-    // ; document_stream := open stream to XML header followed by text document 'path' ]
-    std::ifstream file(path);
-    std::stringstream document_stream;
-    document_stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" << file.rdbuf();
-
-    pugi::xml_document xml_document;
-    // [ load_success -> I
-    // | else -> print error and exit ]
-    if (pugi::xml_parse_result load_success = xml_document.load(document_stream)
-    ; not load_success) {
-      std::cout << "Failed to load file '" << path << "'\n";
-      std::cout << load_success.description() << '\n';
-      std::exit(1);
-    }
-
-    // [ text_stream := stream with the normal text (without tags) in the document ]
-    std::stringstream text_stream;
-    text_stream << xml_document.child("DOC").child("TEXT").child_value();
-
-    // [ text_document, raw_word := empty, empty ]
-    std::vector<std::string> text_document;
-    std::string raw_word;
-
-    // [ raw_word   := w/e
-    // ; text_document := w_1,...,w_n, where w_i is a lower case word or digit ]
-    while (text_stream >> raw_word) {
-      for (std::string word : splitOnPunct(raw_word)) {
-        // Found punctuation at the end of a word.
-        if (word.empty() or vocab.find(word) == vocab.end()) {
-          continue;
-        }
-        // [ text_document := text_document ++ word, where ++ is vector append
-        // ; word := empty ]
-        text_document.emplace_back(std::move(word));
-      }
-    }
-
-    return text_document;
-  }*/
-
   std::vector<std::string>
   readTextDocument(const std::string& path, const std::unordered_map<std::string, int>& vocab) const
   {
-    // [ vocab_size, vocab, text_document, word := -1, empty, empty, empty ]
+    // [ text_stream, text_document, raw_word := text file ready to be read,
+    //                                           empty, empty ]
     std::ifstream text_stream(path);
     std::vector<std::string> text_document;
     std::string raw_word;
 
-    // [ vocab_size := w/e
-    // ; raw_word   := w/e
-    // ; vocab := mapping f(w) = i where w is a lower case word or digit
-    //            and i is its index in the vocabulary
-    // ; text_document := w_1,...,w_n, where w_i is a lower case word or digit ]
+    // [ text_document := w_1,...,w_n, where w_i is a lower case word or digit ]
     while (text_stream >> raw_word) {
       for (std::string word : splitOnPunct(raw_word)) {
-        // Found punctuation at the beginning or end of a word.
+        // Only add word if it is in the vocabulary. This also handles empty
+        // words and just punctuation.
         if (vocab.find(word) != vocab.cend()) {
           text_document.emplace_back(std::move(word));
         }
@@ -107,18 +55,16 @@ public:
    * Transform a sequence of word tokens into a document matrix of
    * time x vocabulary entry. Each row corresponds then to a distribution of
    * words in a particular location ("time") in the document, hence it must sum
-   * to one. With <smoothing_amount> = 0 then the matrix is a simple count
-   * matrix.
+   * to one. With <smoothing_amount> = 0 then the matrix is a simple frequency
+   * matrix. The vocabulary must be already be constructed.
    */
   document(const std::string& pathname, const std::unordered_map<std::string, int>& vocab, double smoothing_amount)
   : _filename(pathname)
   {
-    // const std::vector<std::string> word_sequence = readXmlDocument(pathname, vocab);
+    // [ word_sequence := w_1,...,w_n, where w_i is a lower case word or digit ]
     const std::vector<std::string> word_sequence = readTextDocument(pathname, vocab);
 
-    // [ vocab_size := number of unique words (terms)
-    // ; document_size := number of words
-    // ; document := matrix M[i,j] = smoothing_amount for
+    // [ document := matrix M[i,j] = smoothing_amount for
     //               all 0 <= i <= document_size and 0 <= j <= vocab_size ]
     _document = Eigen::MatrixXd::Constant(word_sequence.size(), vocab.size(), smoothing_amount);
 
@@ -130,23 +76,11 @@ public:
     }
   }
 
-  // Same as above but with the vocabulary previously constructed. This is used
-  // for when we have a lot of documents to process at the same time and want
-  // to (of course) use the same vocabulary between them.
-  /*document(const std::string& file_path, const std::unordered_map<std::string, int>& vocab, double smoothing_amount)
-  : _filename(file_path)
-  {
-    std::vector<std::string> word_sequence = readTextDocument(file_path, vocab);
-    _document = Eigen::MatrixXd::Constant(word_sequence.size(), vocab.size(), smoothing_amount);
-    for (const auto& [time, word] : enumerate(word_sequence)) {
-      _document(time, vocab.at(word)) += 1;
-      _document.row(time) /= 1 + smoothing_amount * vocab.size();
-    }
-  }
-*/
-
   /**
-   * LDA reader.
+   * LDA reader. The method of use is the same as in the vocabulary case, the
+   * only difference is that we have to provide the simplex base beforehand
+   * (this is a word x dimension of interest matrix). At this point base does
+   * not need to sum to one (we force normalization ourselves).
    */
   document(const std::string& matrix_pathname, const std::string& document_pathname, const std::unordered_map<std::string, int>& vocab)
   : _filename(document_pathname)
@@ -162,16 +96,24 @@ public:
     // (using the lexicon to index the embedding matrix)
     std::vector<Eigen::VectorXd> word_embedding_sequence;
     std::ifstream document_file(document_pathname);
-    std::string doc_word;
-    while (document_file >> doc_word) {
-      for (const std::string& stripped : splitOnPunct(doc_word)) {
-        // Only add pruned words
-        if (vocab.find(stripped) != vocab.cend()) {
-          word_embedding_sequence.push_back(topic_embeddings.row(vocab.at(stripped)));
+    std::string raw_word;
+    while (document_file >> raw_word) {
+      for (const std::string& word : splitOnPunct(raw_word)) {
+        if (vocab.find(word) != vocab.cend()) {
+          word_embedding_sequence.push_back(topic_embeddings.row(vocab.at(word)));
         }
       }
     }
 
+    // XXX(jcruz): Possibly wrong. We're losing basis embedding distance
+    // information if we transform it into a simplex, no matter what the
+    // embedding is (word2vec, LDA, etc.).
+    // E.g. (in 2 dimensions)
+    //
+    // |     x                        |
+    // |\  x      gets normalized to  |\
+    // | \                            | X
+    // |__\___                        |__\___
     _document = Eigen::MatrixXd::Zero(word_embedding_sequence.size(), n_topics);
     for (size_t row = 0; row < word_embedding_sequence.size(); ++row) {
       _document.row(row) = word_embedding_sequence[row].array().exp();
@@ -201,8 +143,6 @@ public:
         if (mu < 0 or mu > 1.0) {
           return Eigen::RowVectorXd::Zero(vocab_size());
         }
-
-        // [ distribution := vector 0,...,0 of length vocab_size ]
         Eigen::RowVectorXd distribution = Eigen::RowVectorXd::Zero(vocab_size());
         // [ distribution := distribution where all values sum to 1 and the
         //                   bigger values are concentrated around μ ]
@@ -233,10 +173,8 @@ public:
     return sampled_curve;
   }
 
-  // Approximate the derivative of the curve by computing the central
-  // differences between consecutive distributions (points on the curve). The
-  // number of sample points used is given by <curve_sample_points>. Naturally,
-  // the higher the sample points the more precise the approximation will be.
+  // Calculate the derivative of the curve in an uniform <curve_sample_points>
+  // interval using a default limit approximation of 10^-8.
   Eigen::MatrixXd compute_derivative(int sample_points, double h=1e-8) const {
     Eigen::MatrixXd derivative = Eigen::MatrixXd::Zero(sample_points, vocab_size());
 #pragma omp parallel for
@@ -252,9 +190,11 @@ public:
     return _document.cols();
   }
 
+
   int length() const {
     return _document.rows();
   }
+
 
   const std::string& filename() const {
     return _filename;
@@ -278,7 +218,7 @@ public:
   // entropy of all the distributions in the curve (all the points). Since we have
   // an infinite number of distributions, we integrate them.
   double curveEntropy(int integral_points) const {
-    // [ return := Int_0^1 H(γ(μ)) dμ ]
+    // [ return := integral_0^1 entropy(curve(μ)) dμ ]
     return trapezoidal_integral([this](double mu) {return entropy(_curve(mu));}, 0, 1, integral_points);
   }
 

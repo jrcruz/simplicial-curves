@@ -85,6 +85,7 @@ int main(int argc, const char* argv[]) {
   std::ifstream all_paths(filepath);
   std::string path;
   while (all_paths >> path) {
+    std::cout << "Reading file '" << path << "'\n";
     document doc(matrix_file, path, vocab);
     std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
 
@@ -99,12 +100,12 @@ int main(int argc, const char* argv[]) {
     outfile_name << getFileName(path) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
 
     if (sample_type == "curve" or sample_type == "both") {
-      std::cout << "Curve:\n";
       lax::write_matrix(doc.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
+      std::cout << "Wrote curve (" << sample_points << " sample points)\n";
     }
     if (sample_type == "gradient" or sample_type == "both") {
-      std::cout << "Derivative:\n";
       lax::write_matrix(doc.compute_derivative(sample_points), outfile_name.str() + "_deriv.txt", ',');
+      std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
     }
   }
 }

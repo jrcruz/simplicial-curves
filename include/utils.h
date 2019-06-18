@@ -68,7 +68,7 @@ inline std::vector<std::string> split(const std::string& to_split, char delim) {
 }
 
 // Return the base name of a file given a path.
-// E.g. "/a/b/c.txt" -> "c"; "a./b/c.dot.txt" -> "c.dot"; "a.txt" -> "a"
+// E.g. "/a/b/c.txt" -> "c"; "a/b/c.dot.txt" -> "c"; "a" -> "a"
 inline std::string getFileName(const std::string& file_path) {
   return split(split(file_path, '/').back(), '.').front();
 }
@@ -90,39 +90,8 @@ std::vector<std::string> splitOnPunct(const std::string& word) {
   return split_vector;
 }
 
-// Given a file with text file paths, one in each line, return a mapping
-// word → int for every punctuation-pruned word in all the files.
-/*std::unordered_map<std::string, int> readAllVocab(const std::string& paths)
-{
-  std::ifstream path_file(paths);
-  std::unordered_map<std::string, int> vocab;
-  int vocab_size = 0; // To ensure index starts at 0.
-  std::string raw_word;
-  std::string path;
-
-  // [ vocab_size := w/e
-  // ; raw_word   := w/e
-  // ; text_document := w_1,...,w_n, where w_i is a lower case word or digit ]
-  while (path_file >> path) {
-    std::ifstream text_stream(path);
-    while (text_stream >> raw_word) {
-      for (std::string word : splitOnPunct(raw_word)) {
-        // Found punctuation at the end of a word.
-        if (word.empty()) {
-          continue;
-        }
-        // [ vocab[word] does not exists -> vocab_size := vocab_size + 1
-        // | else -> I ]
-        if (vocab.find(word) == vocab.end()) {
-          vocab[word] = vocab_size;
-          ++vocab_size;
-        }
-      }
-    }
-  }
-  return vocab;
-}*/
-
+// Reads a file with one word per line and returns a mapping word -> int, where
+// int is the line where the word was in the file.
 std::unordered_map<std::string, int>
 readVocab(const std::string& vocab_path)
 {

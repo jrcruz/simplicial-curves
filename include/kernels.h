@@ -6,7 +6,7 @@
 #include <boost/math/distributions/beta.hpp>
 #include <boost/math/quadrature/trapezoidal.hpp>
 
-typedef std::function<double(double, double, double)> kernel_type;
+using kernel_type = std::function<double(double, double, double)>;
 
 // Kernel to smooth out the local (in a section from 0 to 1 in the
 // length-normalized) word histogram. <mu> (in [0, 1]) is the section of the
