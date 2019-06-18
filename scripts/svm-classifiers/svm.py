@@ -34,8 +34,8 @@ def main(argv):
     test_labels = []
     file_dir = argv[1]
 
-    for file_name in os.listdir(file_namedir):
-        with open(file_dir + '/' + file_name) as file:
+    for file_name in open(file_dir):
+        with open(file_name.strip()) as file:
             document = []
             try:
                 a = map(lambda s: s.strip().split(' '), file)
@@ -60,24 +60,25 @@ def main(argv):
     for i in range(len(test_labels)):
         test_labels[i] = labels[test_labels[i]]
 
+    assert len(dataset) == len(test_labels)
 
-    print(len(dataset))
-    print(len(test_labels))
+    print("Number of samples:", len(dataset))
+    print("number of classes:", c + 1)
 
     vectorizer = TfidfVectorizer(min_df=0)
     tfidf_matrix = vectorizer.fit_transform(dataset)
 
     x_train, x_test, y_train, y_test = train_test_split(tfidf_matrix, test_labels, test_size=0.2)
     c_values = [100.0, 50.0, 10.0, 5.0, 1.0, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001]
-
-
+    gamma_values = [10.0, 1.0, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
 
     print("RBF kernel:")
     for c in c_values:
-        classifier = svm.SVC(C=c)
-        classifier.fit(x_train, y_train)
-        acc = classifier.score(x_test, y_test)
-        print("C = {:.3}, Accuracy = {}".format(c, acc))
+        for g in gamma_values:
+            classifier = svm.SVC(C=c, gamma=g)
+            classifier.fit(x_train, y_train)
+            acc = classifier.score(x_test, y_test)
+            print("C = {:.3}, G = {:.3}, Accuracy = {}".format(c, g, acc))
 
     print("Linear kernel:")
     for c in c_values:

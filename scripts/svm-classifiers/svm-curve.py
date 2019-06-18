@@ -4,9 +4,7 @@ import sys
 
 import numpy
 import sklearn
-import string
 from sklearn import svm
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 
 
@@ -35,21 +33,23 @@ def main(argv):
     for i in range(len(test_labels)):
         test_labels[i] = labels[test_labels[i]]
 
+    assert len(dataset) == len(test_labels)
 
-    print(len(dataset))
-    print(len(test_labels))
-
+    print("Number of samples:", len(dataset))
+    print("Number of dimensions:", dataset.shape)
+    print("number of classes:", c + 1)
 
     x_train, x_test, y_train, y_test = train_test_split(dataset, test_labels, test_size=0.2)
-
     c_values = [100.0, 50.0, 10.0, 5.0, 1.0, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001]
+    gamma_values = [10.0, 1.0, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
 
     print("RBF kernel:")
     for c in c_values:
-        classifier = svm.SVC(C=c)
-        classifier.fit(x_train, y_train)
-        acc = classifier.score(x_test, y_test)
-        print("C = {:.3}, Accuracy = {}".format(c, acc))
+        for g in gamma_values:
+            classifier = svm.SVC(C=c, gamma=g)
+            classifier.fit(x_train, y_train)
+            acc = classifier.score(x_test, y_test)
+            print("C = {:.3}, G = {:.3}, Accuracy = {}".format(c, g, acc))
 
     print("Linear kernel:")
     for c in c_values:
