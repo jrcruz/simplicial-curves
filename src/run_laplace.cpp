@@ -4,7 +4,7 @@
 #include "document.h"
 
 namespace {
-  std::string filepath;
+  std::string filepath, vocab_file;
   std::string sample_type = "both";
   double c_smoothing = 0.1, sigma = 0.1;
   int int_points = 50, sample_points = 100;
@@ -16,6 +16,8 @@ namespace {
     ("help,h", "Display this help menu") //
     ("filepath,f", boost::program_options::value < std::string > (&filepath),
      "Document to analyse (plain text or XML file) [required]") //
+    ("vocab,v", boost::program_options::value < std::string > (&vocab_file),
+     "Vocabulary file given as input to LDA (one word per line) [required]") //
     ("sample-type,t", boost::program_options::value < std::string > (&sample_type),
      "Sampling type: 'curve' outputs the document curve; 'gradient' outputs the gradient (derivative); 'both' outputs both [both]") //
     ("use-beta,b", "Use Beta kernel instead of Gaussian kernel for curve smoothing [use Gaussian]") //
@@ -43,6 +45,12 @@ namespace {
       exit(1);
     }
 
+    if (!vm.count("vocab")) {
+      std::cerr << "Vocabulary file was not specified" << std::endl;
+      std::cerr << desc << std::endl;
+      exit(1);
+    }
+
     if (!(sample_type == "curve" || sample_type == "gradient" || sample_type == "both")) {
       std::cerr << "Sample type must be one of 'curve', 'gradient', or 'both'." << std::endl;
       std::exit(1);
@@ -64,11 +72,12 @@ namespace {
 int main(int argc, const char* argv[]) {
 
   parse_options(argc, argv);
+  auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
 
-  document doc(filepath, c_smoothing);
+  const std::unordered_map<std::string, int> vocab = readVocab(vocab_file);
+  document doc(filepath, vocab, c_smoothing);
   std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
 
-  auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
   doc.makeCurveFunction(sigma, int_points, kernel_func);
 
   std::stringstream outfile_name;
@@ -80,8 +89,7 @@ int main(int argc, const char* argv[]) {
   }
   if (sample_type == "gradient" or sample_type == "both") {
     std::cout << "Derivative:\n";
-    Eigen::MatrixXd deriv = doc.compute_derivative(sample_points);
-    lax::write_matrix(deriv, outfile_name.str() + "_deriv.txt", ',');
+    lax::write_matrix(doc.compute_derivative(sample_points), outfile_name.str() + "_deriv.txt", ',');
   }
 }
 

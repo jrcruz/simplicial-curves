@@ -79,11 +79,12 @@ namespace {
 int main(int argc, const char* argv[]) {
 
   parse_options(argc, argv);
+  auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
 
-  document doc(matrix_file, vocab_file, filepath);
+  const std::unordered_map<std::string, int> vocab = readVocab(vocab_file);
+  document doc(matrix_file, filepath, vocab);
   std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
 
-  auto kernel_func = use_beta ? smoothingBetaKernel : smoothingGaussianKernel;
   doc.makeCurveFunction(sigma, int_points, kernel_func);
 
   std::stringstream outfile_name;
@@ -95,8 +96,7 @@ int main(int argc, const char* argv[]) {
   }
   if (sample_type == "gradient" or sample_type == "both") {
     std::cout << "Derivative:\n";
-    Eigen::MatrixXd deriv = doc.compute_derivative(sample_points);
-    lax::write_matrix(deriv, outfile_name.str() + "_deriv.txt", ',');
+    lax::write_matrix(doc.compute_derivative(sample_points), outfile_name.str() + "_deriv.txt", ',');
   }
 }
 
