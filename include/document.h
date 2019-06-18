@@ -28,8 +28,8 @@ private:
    * dictionary of (word, position), indicating the position of 'word' in the
    * lexicon.
    */
-  std::pair<std::vector<std::string>, std::unordered_map<std::string, int>>
-  readXmlDocument(const std::string& path) const {
+/*  std::vector<std::string>
+  readXmlDocument(const std::string& path, const std::unordered_map<std::string, int>& vocab) const {
 
     // DUC provides their test documents in malformed XML, so we need to repair
     // it to feed it to the parser.
@@ -53,39 +53,26 @@ private:
     std::stringstream text_stream;
     text_stream << xml_document.child("DOC").child("TEXT").child_value();
 
-    // [ vocab_size, vocab, text_document, word := -1, empty, empty, empty ]
-    int vocab_size = 0; // To ensure index starts at 0.
-    std::unordered_map<std::string, int> vocab;
+    // [ text_document, raw_word := empty, empty ]
     std::vector<std::string> text_document;
     std::string raw_word;
 
-    // [ vocab_size := w/e
-    // ; raw_word   := w/e
-    // ; vocab := mapping f(w) = i where w is a lower case word or digit
-    //            and i is its index in the vocabulary
+    // [ raw_word   := w/e
     // ; text_document := w_1,...,w_n, where w_i is a lower case word or digit ]
     while (text_stream >> raw_word) {
       for (std::string word : splitOnPunct(raw_word)) {
         // Found punctuation at the end of a word.
-        if (word.empty()) {
+        if (word.empty() or vocab.find(word) == vocab.end()) {
           continue;
         }
-        // [ vocab[word] does not exists -> vocab_size := vocab_size + 1
-        // | else -> I ]
-        if (vocab.find(word) == vocab.end()) {
-          vocab[word] = vocab_size;
-          ++vocab_size;
-        }
-
         // [ text_document := text_document ++ word, where ++ is vector append
         // ; word := empty ]
         text_document.emplace_back(std::move(word));
       }
     }
 
-    return {text_document, vocab};
-
-  }
+    return text_document;
+  }*/
 
   std::vector<std::string>
   readTextDocument(const std::string& path, const std::unordered_map<std::string, int>& vocab) const
@@ -103,10 +90,9 @@ private:
     while (text_stream >> raw_word) {
       for (std::string word : splitOnPunct(raw_word)) {
         // Found punctuation at the beginning or end of a word.
-        if (word.empty() or vocab.find(word) == vocab.end()) {
-          continue;
+        if (vocab.find(word) != vocab.cend()) {
+          text_document.emplace_back(std::move(word));
         }
-        text_document.emplace_back(std::move(word));
       }
     }
     return text_document;
@@ -124,10 +110,11 @@ public:
    * to one. With <smoothing_amount> = 0 then the matrix is a simple count
    * matrix.
    */
-  document(const std::string& pathname, double smoothing_amount)
+  document(const std::string& pathname, const std::unordered_map<std::string, int>& vocab, double smoothing_amount)
   : _filename(pathname)
   {
-    const auto [word_sequence, vocab] = readXmlDocument(pathname);
+    // const std::vector<std::string> word_sequence = readXmlDocument(pathname, vocab);
+    const std::vector<std::string> word_sequence = readTextDocument(pathname, vocab);
 
     // [ vocab_size := number of unique words (terms)
     // ; document_size := number of words
@@ -146,7 +133,7 @@ public:
   // Same as above but with the vocabulary previously constructed. This is used
   // for when we have a lot of documents to process at the same time and want
   // to (of course) use the same vocabulary between them.
-  document(const std::string& file_path, const std::unordered_map<std::string, int>& vocab, double smoothing_amount)
+  /*document(const std::string& file_path, const std::unordered_map<std::string, int>& vocab, double smoothing_amount)
   : _filename(file_path)
   {
     std::vector<std::string> word_sequence = readTextDocument(file_path, vocab);
@@ -156,12 +143,12 @@ public:
       _document.row(time) /= 1 + smoothing_amount * vocab.size();
     }
   }
-
+*/
 
   /**
    * LDA reader.
    */
-  document(const std::string& matrix_pathname, const std::string& vocab_pathname, const std::string& document_pathname)
+  document(const std::string& matrix_pathname, const std::string& document_pathname, const std::unordered_map<std::string, int>& vocab)
   : _filename(document_pathname)
   {
     // [ topic_embeddings := topic_embeddings (word x topic matrix), where
@@ -169,18 +156,7 @@ public:
     //                       the word ]
     Eigen::MatrixXd topic_embeddings = lax::read_matrix(matrix_pathname, ' ');
     topic_embeddings.transposeInPlace();
-    size_t n_topics = topic_embeddings.cols();
-
-    // Load entire lexicon (only the words that have a corresponding word embedding)
-    // [ vocabulary_map := word -> N mapping, from the string to the words' index in the vocabulary ]
-    std::ifstream vocab_file(vocab_pathname);
-    std::unordered_map<std::string, int> vocabulary_map;
-    int voc_size = 0;
-    std::string vocab_word;
-    while (vocab_file >> vocab_word) {
-      vocabulary_map[vocab_word] = voc_size;
-      ++voc_size;
-    }
+    const size_t n_topics = topic_embeddings.cols();
 
     // Read the original file and map each word to its corresponding embedding
     // (using the lexicon to index the embedding matrix)
@@ -190,8 +166,8 @@ public:
     while (document_file >> doc_word) {
       for (const std::string& stripped : splitOnPunct(doc_word)) {
         // Only add pruned words
-        if (vocabulary_map.find(stripped) != vocabulary_map.cend()) {
-          word_embedding_sequence.push_back(topic_embeddings.row(vocabulary_map[stripped]));
+        if (vocab.find(stripped) != vocab.cend()) {
+          word_embedding_sequence.push_back(topic_embeddings.row(vocab.at(stripped)));
         }
       }
     }
@@ -212,21 +188,6 @@ public:
     return _document(ceiled_time_index, word);
   }
 
-  // Approximate the derivative of the curve by computing the central
-  // differences between consecutive distributions (points on the curve). The
-  // number of sample points used is given by <curve_sample_points>. Naturally,
-  // the higher the sample points the more precise the approximation will be.
-  Eigen::MatrixXd compute_derivative(int sample_points) const {
-    constexpr double h = 1e-7;
-    Eigen::MatrixXd derivative = Eigen::MatrixXd::Zero(sample_points, vocab_size());
-    for (int j = 0; j < sample_points; ++j) {
-      const double mu = static_cast<double>(j) / sample_points;
-      std::cout << "\rAt " << j << " of " << sample_points << " points";
-      derivative.row(j) = (_curve(mu + h) - _curve(mu)) / h;
-    }
-    return derivative;
-  }
-
   // Given a document representation and a scaling amount (<sigma> > 0), returns
   // a function that accepts a <mu> between 0 and 1 (representing a timepoint
   // in the document) and returns a distribution over words at that <mu>,
@@ -245,6 +206,7 @@ public:
         Eigen::RowVectorXd distribution = Eigen::RowVectorXd::Zero(vocab_size());
         // [ distribution := distribution where all values sum to 1 and the
         //                   bigger values are concentrated around μ ]
+#pragma omp parallel for
         for (int word = 0; word < vocab_size(); ++word) {
           auto integrand = [=](double time) -> double {
             return lengthNormalization(time, word) * kernel_func(time, mu, sigma);
@@ -261,8 +223,8 @@ public:
   // <curve_function> at uniform length <curve_sample_points>.
   Eigen::MatrixXd compute_curve(int sample_points) const {
     Eigen::MatrixXd sampled_curve = Eigen::MatrixXd::Zero(sample_points + 1, vocab_size());
+#pragma omp parallel for
     for (int mu = 0; mu < sample_points + 1; ++mu) {
-      std::cout << "\rAt " << mu << " of " << sample_points << " points";
       sampled_curve.row(mu) = _curve(static_cast<double>(mu) / sample_points);
     }
     const double abs_error = sampled_curve.rowwise().sum().unaryExpr([](double val) {
@@ -271,13 +233,20 @@ public:
     return sampled_curve;
   }
 
-  // Calculate the total entropy of the curve. This is defined as the sum of the
-  // entropy of all the distributions in the curve (all the points). Since we have
-  // an infinite number of distributions, we integrate them.
-  double curveEntropy(int integral_points) const {
-    // [ return := Int_0^1 H(γ(μ)) dμ ]
-    return trapezoidal_integral([this](double mu) {return entropy(_curve(mu));}, 0, 1, integral_points);
+  // Approximate the derivative of the curve by computing the central
+  // differences between consecutive distributions (points on the curve). The
+  // number of sample points used is given by <curve_sample_points>. Naturally,
+  // the higher the sample points the more precise the approximation will be.
+  Eigen::MatrixXd compute_derivative(int sample_points, double h=1e-8) const {
+    Eigen::MatrixXd derivative = Eigen::MatrixXd::Zero(sample_points, vocab_size());
+#pragma omp parallel for
+    for (int j = 0; j < sample_points; ++j) {
+      const double mu = static_cast<double>(j) / sample_points;
+      derivative.row(j) = (_curve(mu + h) - _curve(mu)) / h;
+    }
+    return derivative;
   }
+
 
   int vocab_size() const {
     return _document.cols();
@@ -303,6 +272,14 @@ public:
   // upward -- this way we err downward and _somehow_ compensate).
   int revertNormalization(double norm_time) const {
     return std::floor(norm_time * (length() - 1));
+  }
+
+  // Calculate the total entropy of the curve. This is defined as the sum of the
+  // entropy of all the distributions in the curve (all the points). Since we have
+  // an infinite number of distributions, we integrate them.
+  double curveEntropy(int integral_points) const {
+    // [ return := Int_0^1 H(γ(μ)) dμ ]
+    return trapezoidal_integral([this](double mu) {return entropy(_curve(mu));}, 0, 1, integral_points);
   }
 
   friend std::ostream& operator<<(std::ostream& o, const document& doc) {

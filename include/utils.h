@@ -92,7 +92,7 @@ std::vector<std::string> splitOnPunct(const std::string& word) {
 
 // Given a file with text file paths, one in each line, return a mapping
 // word → int for every punctuation-pruned word in all the files.
-std::unordered_map<std::string, int> readAllVocab(const std::string& paths)
+/*std::unordered_map<std::string, int> readAllVocab(const std::string& paths)
 {
   std::ifstream path_file(paths);
   std::unordered_map<std::string, int> vocab;
@@ -119,6 +119,20 @@ std::unordered_map<std::string, int> readAllVocab(const std::string& paths)
         }
       }
     }
+  }
+  return vocab;
+}*/
+
+std::unordered_map<std::string, int>
+readVocab(const std::string& vocab_path)
+{
+  std::ifstream vocab_file(vocab_path);
+  std::unordered_map<std::string, int> vocab;
+  int voc_size = 0;
+  std::string vocab_word;
+  while (vocab_file >> vocab_word) {
+    vocab[vocab_word] = voc_size;
+    ++voc_size;
   }
   return vocab;
 }
