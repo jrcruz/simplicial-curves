@@ -106,6 +106,18 @@ readVocab(const std::string& vocab_path)
   return vocab;
 }
 
+
+// Normalize the document length to be in the interval [0, 1]. This abstracts
+// away the actual document length and focuses purely on its sequential
+// progression, all=owing us to compare two different documents.
+// Refer to Definition 4 in the paper for more details.
+double lengthNormalization(Eigen::MatrixXd const* doc, double time, int word) {
+  const int ceiled_time_index = std::ceil(time * (doc->rows() - 1));
+  return (*doc)(ceiled_time_index, word);
+}
+
+
+
 // Measure the time that the function <f> takes to execute (in milliseconds)
 // and forward any value that <f> returns.
 template <typename F>
