@@ -82,7 +82,7 @@ int main(int argc, const char* argv[]) {
   while (all_paths >> path) {
     std::cout << "Reading file '" << path << "'\n";
     document doc(path, vocab, c_smoothing);
-    //std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
+    std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
 
     // Skip over empty documents (happens when, for example, all the words in
     // the document are not in the vocabulary).
@@ -90,26 +90,14 @@ int main(int argc, const char* argv[]) {
       continue;
     }
     doc.makeCurveFunction(sigma, int_points, kernel_func);
-    std::cerr << doc._curve << std::endl;
     all_documents.emplace_back(std::move(doc));
     std::cerr << std::endl;
   }
-  std::cerr << "Now out: curve and matrix\n";
-  std::cerr << all_documents[0]._curve << " -- " << all_documents[0]._doc_matrix.get() << std::endl;
-  std::cerr << all_documents[1]._curve << " -- " << all_documents[1]._doc_matrix.get() << std::endl;
-  //std::cout << "doc0 eval: " << all_documents[0]._curve(0.4).sum() << std::endl;
-  //return 0;
-  //std::cout << "doc1 eval: " << all_documents[1](0.4).sum() << std::flush;
-  // document avg_document = std::accumulate(all_documents.begin() + 1, all_documents.end(), all_documents.front());
   std::cout << "Got here\n";
   document avg_document = all_documents[0] + all_documents[1];
 
-  std::cout << avg_document.filename() << " " << bool(avg_document._curve) << " " << avg_document.length() << " " << avg_document.vocab_size() << "\n";
-  std::cout << all_documents[0].filename() << " " << bool(all_documents[0]._curve) << " " << all_documents[0].length() << " " << all_documents[0].vocab_size() << "\n";
-  std::cout << all_documents[1]._curve->operator()(0.0) << "\n";
-//  return 1;
-  std::cout << all_documents[1]._curve->operator()(0.1) << "\n";
-  std::cout << avg_document._curve->operator()(0.1) << "\n";
+  std::cout << avg_document.filename() << " " << avg_document.vocab_size() << "\n";
+  std::cout << all_documents[0].filename() << " " << all_documents[0].length() << " " << all_documents[0].vocab_size() << "\n";
 
   std::stringstream outfile_name;
   outfile_name << getFileName(avg_document.filename()) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
