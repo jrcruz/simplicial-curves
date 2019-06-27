@@ -54,8 +54,6 @@ private:
     }
   };
 
-
-
 private: // FUNCTIONS USED BY LAPLACE TF CONSTRUCTOR
 
   /**
@@ -115,6 +113,9 @@ public:
   {
     // [ word_sequence := w_1,...,w_n, where w_i is a lower case word or digit ]
     const std::vector<std::string> word_sequence = readTextDocument(pathname, vocab);
+    if (word_sequence.size() == 0) {
+      throw std::domain_error("Trying to create an empty document. Document '" + pathname + "' was empty after preprocessing");
+    }
     // [ document := matrix M[i,j] = smoothing_amount for
     //               all 0 <= i <= document_size and 0 <= j <= vocab_size ]
     _doc_matrix = std::make_shared<Eigen::MatrixXd>(Eigen::MatrixXd::Constant(word_sequence.size(), _vocab_size, smoothing_amount));
@@ -156,6 +157,9 @@ public:
           word_embedding_sequence.push_back(topic_embeddings.row(vocab.at(word)));
         }
       }
+    }
+    if (word_embedding_sequence.size() == 0) {
+      throw std::domain_error("Trying to create an empty document. Document '" + document_pathname + "' was empty after preprocessing");
     }
 
     // XXX(jcruz): Possibly wrong. We're losing basis embedding distance
@@ -244,36 +248,12 @@ public:
     return derivative;
   }
 
-
   int vocab_size() const {
     return _vocab_size;
   }
 
-
-  int length() const {
-    if (_doc_matrix != nullptr) {
-      return _doc_matrix->rows();
-    }
-     throw std::domain_error("Called length() on a non-matrix-backed document.");
-  }
-
-
   const std::string& filename() const {
     return _filename;
-  }
-
-
-  // Given a position <norm-time> in the document (the kernel's mu) and a
-  // document size (length), return the closest (discrete) word to the given
-  // (continuous) time point.
-  // To revert from the curve to the original word, we can see where the current
-  // mu maps to the document. If N = 100 and mu = 0.1, then the current word
-  // should be the 10th word in the document. If this can't be done cleanly
-  // (which is what happens) then consider the word to be the floor of mu * N
-  // (since we consider the ceil for the normalization mapping, thus erring
-  // upward -- this way we err downward and _somehow_ compensate).
-  int revertNormalization(double norm_time) const {
-    return std::floor(norm_time * (length() - 1));
   }
 
   // Calculate the total entropy of the curve. This is defined as the sum of the
@@ -283,19 +263,6 @@ public:
     // [ return := integral_0^1 entropy(curve(μ)) dμ ]
     return trapezoidal_integral([this](double mu) {return entropy((*_curve)(mu));}, 0, 1, integral_points);
   }
-
-  friend std::ostream& operator<<(std::ostream& o, const document& doc) {
-    for (int row = 0; row < doc.length(); ++row) {
-      // [ output_stream := all the columns in the row, separated by ',' ]
-      o << (*doc._doc_matrix)(row, 0);
-      for (int col = 1; col < doc.vocab_size(); ++col) {
-        o << ',' << (*doc._doc_matrix)(row, col);
-      }
-      o << '\n';
-    }
-    return o;
-  }
-
 };
 
 #endif // __SCJ_DOCUMENT_H__

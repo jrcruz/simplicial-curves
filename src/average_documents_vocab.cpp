@@ -80,24 +80,24 @@ int main(int argc, const char* argv[]) {
   std::vector<document> all_documents;
 
   while (all_paths >> path) {
-    std::cout << "Reading file '" << path << "'\n";
-    document doc(path, vocab, c_smoothing);
-    std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
-
-    // Skip over empty documents (happens when, for example, all the words in
-    // the document are not in the vocabulary).
-    if (doc.length() == 0) {
-      continue;
+    try {
+      std::cout << "Reading file '" << path << "'\n";
+      document doc(path, vocab, c_smoothing);
+      std::cout << "Dimension size: " << doc.vocab_size() << '\n';
+      doc.makeCurveFunction(sigma, int_points, kernel_func);
+      all_documents.emplace_back(std::move(doc));
+      std::cerr << std::endl;
     }
-    doc.makeCurveFunction(sigma, int_points, kernel_func);
-    all_documents.emplace_back(std::move(doc));
-    std::cerr << std::endl;
+    catch (std::domain_error&) {
+      // Skip over empty documents (happens when, for example, all the words in
+      // the document are not in the vocabulary).
+    }
   }
   std::cout << "Got here\n";
   document avg_document = all_documents[0] + all_documents[1];
 
   std::cout << avg_document.filename() << " " << avg_document.vocab_size() << "\n";
-  std::cout << all_documents[0].filename() << " " << all_documents[0].length() << " " << all_documents[0].vocab_size() << "\n";
+  std::cout << all_documents[0].filename() << " " << all_documents[0].vocab_size() << "\n";
 
   std::stringstream outfile_name;
   outfile_name << getFileName(avg_document.filename()) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;

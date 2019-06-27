@@ -85,27 +85,28 @@ int main(int argc, const char* argv[]) {
   std::ifstream all_paths(filepath);
   std::string path;
   while (all_paths >> path) {
-    std::cout << "Reading file '" << path << "'\n";
-    document doc(matrix_file, path, vocab);
-    std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
+    try {
+      std::cout << "Reading file '" << path << "'\n";
+      document doc(matrix_file, path, vocab);
+      std::cout << "Dimension size: " << doc.vocab_size() << '\n';
 
-    // Skip over empty documents (happens when, for example, all the words in
-    // the document are not in the vocabulary).
-    if (doc.length() == 0) {
-      continue;
+      doc.makeCurveFunction(sigma, int_points, kernel_func);
+
+      std::stringstream outfile_name;
+      outfile_name << getFileName(path) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
+
+      if (sample_type == "curve" or sample_type == "both") {
+        lax::write_matrix(doc.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
+        std::cout << "Wrote curve (" << sample_points << " sample points)\n";
+      }
+      if (sample_type == "gradient" or sample_type == "both") {
+        lax::write_matrix(doc.compute_derivative(sample_points), outfile_name.str() + "_deriv.txt", ',');
+        std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
+      }
     }
-    doc.makeCurveFunction(sigma, int_points, kernel_func);
-
-    std::stringstream outfile_name;
-    outfile_name << getFileName(path) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
-
-    if (sample_type == "curve" or sample_type == "both") {
-      lax::write_matrix(doc.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
-      std::cout << "Wrote curve (" << sample_points << " sample points)\n";
-    }
-    if (sample_type == "gradient" or sample_type == "both") {
-      lax::write_matrix(doc.compute_derivative(sample_points), outfile_name.str() + "_deriv.txt", ',');
-      std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
+    catch (std::domain_error&) {
+      // Skip over empty documents (happens when, for example, all the words in
+      // the document are not in the vocabulary).
     }
   }
 }

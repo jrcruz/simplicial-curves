@@ -77,7 +77,7 @@ int main(int argc, const char* argv[]) {
   const std::unordered_map<std::string, int> vocab = readVocab(vocab_file);
   std::cout << "Reading file '" << filepath << "'\n";
   document doc(filepath, vocab, c_smoothing);
-  std::cout << "Word sequence size: " << doc.length() << " -- Dimension size: " << doc.vocab_size() << '\n';
+  std::cout << "Dimension size: " << doc.vocab_size() << '\n';
 
   doc.makeCurveFunction(sigma, int_points, kernel_func);
 
