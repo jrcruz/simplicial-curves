@@ -232,7 +232,7 @@ public:
     }
     const double abs_error = sampled_curve.rowwise().sum().unaryExpr([](double val) {
       return std::abs(1 - val);}).sum();
-    std::cout << "\nTotal sample error was " << abs_error << '\n';
+    std::cout << "Total sample error was " << abs_error << '\n';
     return sampled_curve;
   }
 

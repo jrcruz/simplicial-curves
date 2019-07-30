@@ -89,11 +89,11 @@ int main(int argc, const char* argv[]) {
 
       if (sample_type == "curve" or sample_type == "both") {
         lax::write_matrix(doc.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
-        std::cout << "Wrote curve (" << sample_points << " sample points)\n";
+        std::cout << "Wrote curve (" << sample_points << " sample points)\n\n";
       }
       if (sample_type == "gradient" or sample_type == "both") {
         lax::write_matrix(doc.compute_derivative(sample_points), outfile_name.str() + "_deriv.txt", ',');
-        std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
+        std::cout << "Wrote derivative (" << sample_points << " sample points)\n\n";
       }
     }
     catch (std::domain_error&) {
