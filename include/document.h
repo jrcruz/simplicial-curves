@@ -83,7 +83,7 @@ private: // FUNCTIONS USED BY LAPLACE TF CONSTRUCTOR
   }
 
   document(const std::string& filename, std::shared_ptr<CurveFunctionType>& curve, int vocab_size)
-  : _filename{getFileName(filename)}
+  : _filename(getFileName(filename))
   , _curve(curve)
   , _doc_matrix(nullptr)
   , _vocab_size(vocab_size)

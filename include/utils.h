@@ -12,9 +12,11 @@
 #include <sstream>
 #include <fstream>
 #include <chrono>
+#include <complex>
 #include <type_traits>
 
 #include <Eigen/Eigen>
+#include <fftw/fftw3.h>
 
 /**
  * Create a vector of pairs for each element in <word_sequence>, where the
@@ -117,6 +119,55 @@ double lengthNormalization(Eigen::MatrixXd const* doc, double time, int word) {
 }
 
 
+// Calculates the Fast Fourier Transform of the vector <derivative_norm>.
+// References:
+//  (1) http://www.fftw.org/fftw3_doc/ComplexOne_002dDimensionalDFTs.html
+//  (2) http://www.fftw.org/fftw3_doc/One_002dDimensionalDFTsofRealData.html
+//  (3) http://www.fftw.org/fftw3_doc/PlannerFlags.html
+// Steps:
+//  1: Alloc arrays and plan
+//  2: Create plan with _plan_dft
+//  3: Execute plan. This populates the output array in step 2
+//  4: Destroy plan and free all arrays
+Eigen::VectorXcd
+fourierTransform(const Eigen::VectorXd& derivative_norm)
+{
+    // [ input_size   := size of derivative_norm
+    // ; output_size  := size of derivative_norm / 2 + 1, as per ref. (2)
+    // ; input_array  := v in R^input_size, where v_j = w/e
+    // ; output_array := v in C^output_size, where v_j = w/e
+    // ; plan := plan to execute the FFT with in the positive direction with a
+    //        very fast, suboptimal algorithm in correctness ]
+    const int input_size  = derivative_norm.rows();
+    const int output_size = static_cast<int>(std::floor(input_size / 2)) + 1;
+    double* input_array   = fftw_alloc_real(input_size);
+    fftw_complex* output_array = fftw_alloc_complex(output_size);
+    // Must create the plan before initializing the input_array.
+    fftw_plan plan = fftw_plan_dft_r2c_1d(input_size, input_array, output_array,
+                                          FFTW_ESTIMATE | FFTW_DESTROY_INPUT);
+
+    // [ input_array := v in R^array_size where v[j] = derivative_norm[j] ]
+    for (int j = 0; j < input_size; ++j) {
+        input_array[j] = derivative_norm[j];
+    }
+
+    // [ output_array := FFT of input_array
+    // ; input_array  := w/e ]
+    fftw_execute(plan);
+
+    // [ output_vector := v in C^output_size where v[j] = output_array[j] ]
+    Eigen::VectorXcd output_vector(output_size);
+    for (int j = 0; j < output_size; ++j) {
+        output_vector[j] = std::complex<double>(output_array[j][0], output_array[j][1]);
+    }
+
+    // [ plan; input_array; output_array := empty; empty; empty ]
+    fftw_destroy_plan(plan);
+    fftw_free(input_array);
+    fftw_free(output_array);
+
+    return output_vector;
+}
 
 // Measure the time that the function <f> takes to execute (in milliseconds)
 // and forward any value that <f> returns.
@@ -125,7 +176,7 @@ auto
 measureFunctionTime(F f) -> decltype(f())
 {
     auto start = std::chrono::steady_clock::now();
-    if constexpr (std::is_void_v<decltype(f())>) {
+    if constexpr (std::is_void<decltype(f())>::value) {
         f();
         std::chrono::duration<double, std::milli> dur = std::chrono::steady_clock::now() - start;
         std::cerr << "Function took " << dur.count() << "ms.\n";
