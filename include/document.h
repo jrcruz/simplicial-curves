@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <iostream>
+#include <numeric>
 #include <new>
 #include <type_traits>
 #include <vector>
@@ -15,8 +16,11 @@
 
 
 class document {
+public:
+	using CurveFunctionType = std::function<Eigen::RowVectorXd(double)>;
+
 private:
-  using CurveFunctionType = std::function<Eigen::RowVectorXd(double)>;
+
 
   std::string _filename;
   std::shared_ptr<CurveFunctionType> _curve;
@@ -82,16 +86,15 @@ private: // FUNCTIONS USED BY LAPLACE TF CONSTRUCTOR
     return text_document;
   }
 
+public:
+
   document(const std::string& filename, std::shared_ptr<CurveFunctionType>& curve, int vocab_size)
   : _filename(getFileName(filename))
   , _curve(curve)
   , _doc_matrix(nullptr)
   , _vocab_size(vocab_size)
-  {
-    ;
-  }
+  {;}
 
-public:
   document(const document& other) = default;
 
   document(document&& other) = default;
@@ -185,6 +188,7 @@ public:
     throw std::domain_error("Called operator() on a document with no initialized curve");
   }
 
+
   document operator+(const document& other) const {
     std::string filename = _filename + "+" + other.filename();
     auto avg_curve = std::make_shared<CurveFunctionType>(
@@ -264,5 +268,96 @@ public:
     return trapezoidal_integral([this](double mu) {return entropy((*_curve)(mu));}, 0, 1, integral_points);
   }
 };
+
+
+document
+sumCurves(const std::vector<document>& curves)
+{
+	if (curves.size() <= 0) {
+		throw std::invalid_argument("Curve vector must have at least one element.");
+	}
+	// Combine all filenames.
+	std::string filename = std::accumulate(std::cbegin(curves),
+										   std::cend(curves),
+										   std::string{},
+        [](const std::string& p1, const document& p2) {
+		    return p1 + "+" + p2.filename();
+	});
+
+	// Average all the curves.
+	auto avg_curve = std::make_shared<document::CurveFunctionType>(
+		[&curves](double mu) -> Eigen::RowVectorXd {
+			Eigen::RowVectorXd addition_id = Eigen::RowVectorXd::Zero(curves.front().vocab_size());
+			return std::accumulate(std::cbegin(curves),
+								   std::cend(curves),
+								   addition_id,
+				[mu](const Eigen::RowVectorXd& accum, const document& doc) -> Eigen::RowVectorXd {
+					Eigen::RowVectorXd curve_at_mu = doc(mu);
+					return accum + curve_at_mu;
+				}) / curves.size();
+	});
+
+	return {filename, avg_curve, curves.front().vocab_size()};
+}
+
+
+document
+concatenateCurves(const std::vector<document>& curves)
+{
+	if (curves.size() <= 0) {
+		throw std::invalid_argument("Curve vector must have at least one element.");
+	}
+	// Combine all filenames.
+	std::string filename = std::accumulate(std::cbegin(curves),
+										   std::cend(curves),
+										   std::string{},
+        [](const std::string& p1, const document& p2) {
+		    return p1 + "+" + p2.filename();
+    });
+
+
+	auto concat_curve = std::make_shared<document::CurveFunctionType>(
+		[&curves](double mu) -> Eigen::RowVectorXd {
+			const int disambiguate = std::floor(mu * curves.size());
+			const double mu_in_selected_curve = mu / curves.size();
+			return curves[disambiguate](mu_in_selected_curve);
+	});
+
+	return {filename, concat_curve, curves.front().vocab_size()};
+}
+
+
+document
+conflateCurves(const std::vector<document>& curves)
+{
+	if (curves.size() <= 0) {
+		throw std::invalid_argument("Curve vector must have at least one element.");
+	}
+	// Combine all filenames.
+	std::string filename = std::accumulate(std::cbegin(curves),
+										   std::cend(curves),
+										   std::string{},
+        [](const std::string& p1, const document& p2) {
+		    return p1 + "+" + p2.filename();
+	});
+
+	// Multiply all the curves.
+	auto mul_curve = std::make_shared<document::CurveFunctionType>(
+		[&curves] (double mu) -> Eigen::RowVectorXd {
+			Eigen::RowVectorXd multiplication_id = Eigen::RowVectorXd::Constant(curves.front().vocab_size(), 1);
+			Eigen::RowVectorXd conflated_curves =
+					std::accumulate(std::cbegin(curves),
+									std::cend(curves),
+									multiplication_id,
+						[mu](const Eigen::RowVectorXd& accum, const document& doc) -> Eigen::RowVectorXd {
+							Eigen::RowVectorXd curve_at_mu = doc(mu);
+							return accum.cwiseProduct(curve_at_mu);
+						});
+			return conflated_curves / conflated_curves.sum();
+	});
+
+	return {filename, mul_curve, curves.front().vocab_size()};
+}
+
 
 #endif // __SCJ_DOCUMENT_H__

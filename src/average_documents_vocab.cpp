@@ -86,29 +86,43 @@ int main(int argc, const char* argv[]) {
       std::cout << "Dimension size: " << doc.vocab_size() << '\n';
       doc.makeCurveFunction(sigma, int_points, kernel_func);
       all_documents.emplace_back(std::move(doc));
-      std::cerr << std::endl;
+      std::cout << std::endl;
     }
     catch (std::domain_error&) {
+      std::cout << "'" << path << "'" << " was empty\n";
       // Skip over empty documents (happens when, for example, all the words in
       // the document are not in the vocabulary).
     }
   }
-  std::cout << "Got here\n";
+
   document avg_document = all_documents[0] + all_documents[1];
 
-  std::cout << avg_document.filename() << " " << avg_document.vocab_size() << "\n";
-  std::cout << all_documents[0].filename() << " " << all_documents[0].vocab_size() << "\n";
+  document d = sumCurves(all_documents);
+
 
   std::stringstream outfile_name;
   outfile_name << getFileName(avg_document.filename()) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
 
   if (sample_type == "curve" or sample_type == "both") {
-    std::cout << "Going to write\n";
-    lax::write_matrix(avg_document.compute_curve(sample_points), outfile_name.str() + "_curve.txt", ',');
-    std::cout << "Wrote curve (" << sample_points << " sample points)\n";
+	  lax::write_matrix(avg_document.compute_curve(sample_points),
+			  	  	    outfile_name.str() + "_curve.txt", ',');
+      std::cout << "Wrote curve (" << sample_points << " sample points)\n";
   }
   if (sample_type == "gradient" or sample_type == "both") {
-    lax::write_matrix(avg_document.compute_derivative(sample_points), outfile_name.str() + "_deriv.txt", ',');
-    std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
+      lax::write_matrix(avg_document.compute_derivative(sample_points),
+    		  	  	  	outfile_name.str() + "_deriv.txt", ',');
+      std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
+  }
+
+
+  if (sample_type == "curve" or sample_type == "both") {
+  	  lax::write_matrix(d.compute_curve(sample_points),
+  			  	  	    outfile_name.str() + "_curveAVG.txt", ',');
+      std::cout << "Wrote curve (" << sample_points << " sample points)\n";
+  }
+  if (sample_type == "gradient" or sample_type == "both") {
+	  lax::write_matrix(d.compute_derivative(sample_points),
+			   	   	    outfile_name.str() + "_derivAVG.txt", ',');
+      std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
   }
 }

@@ -169,6 +169,16 @@ fourierTransform(const Eigen::VectorXd& derivative_norm)
     return output_vector;
 }
 
+
+// Apply binary <f> pairwise to <p1> and <p2>, in this order.
+template <typename Function>
+Eigen::VectorXd
+compareUnder(const Eigen::VectorXd& p1, const Eigen::VectorXd& p2, Function f)
+{
+	return p1.binaryExpr(p2, f);
+}
+
+
 // Measure the time that the function <f> takes to execute (in milliseconds)
 // and forward any value that <f> returns.
 template <typename F>

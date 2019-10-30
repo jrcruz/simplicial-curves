@@ -51,7 +51,7 @@ kullback(const Eigen::VectorXd& p1, const Eigen::VectorXd& p2)
 double
 jensenShannon(const Eigen::VectorXd& p1, const Eigen::VectorXd& p2)
 {
-    const Eigen::VectorXd M = 0.5 * (p1 + p2);
+    const Eigen::VectorXd M = 0.5 * (p1 + p2); // @suppress("Invalid arguments")
     return 0.5 * (kullback(p1, M) + kullback(p2, M));
 }
 
@@ -61,4 +61,5 @@ innerProduct(const Eigen::VectorXd& p1, const Eigen::VectorXd& p2)
 {
     return p1.dot(p2);
 }
+
 #endif SCJ_DISTANCES_H
