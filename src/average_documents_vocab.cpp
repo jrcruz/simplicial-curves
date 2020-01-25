@@ -95,34 +95,36 @@ int main(int argc, const char* argv[]) {
     }
   }
 
-  document avg_document = all_documents[0] + all_documents[1];
-
-  document d = sumCurves(all_documents);
-
+  document mean_document = sumCurves(all_documents);
+  document conflated_document = conflateCurves(all_documents);
 
   std::stringstream outfile_name;
-  outfile_name << getFileName(avg_document.filename()) << "-c" << c_smoothing << "-s" << sigma << "-ip" << int_points << "-sp" << sample_points;
+  outfile_name << getFileName(mean_document.filename())
+			   << "-c" << c_smoothing
+			   << "-s" << sigma
+			   << "-ip" << int_points
+			   << "-sp" << sample_points;
 
   if (sample_type == "curve" or sample_type == "both") {
-	  lax::write_matrix(avg_document.compute_curve(sample_points),
-			  	  	    outfile_name.str() + "_curve.txt", ',');
+	  lax::write_matrix(mean_document.compute_curve(sample_points),
+			  	  	    outfile_name.str() + "_mean-curve.txt", ',');
       std::cout << "Wrote curve (" << sample_points << " sample points)\n";
   }
   if (sample_type == "gradient" or sample_type == "both") {
-      lax::write_matrix(avg_document.compute_derivative(sample_points),
-    		  	  	  	outfile_name.str() + "_deriv.txt", ',');
+      lax::write_matrix(mean_document.compute_derivative(sample_points),
+    		  	  	  	outfile_name.str() + "_mean-deriv.txt", ',');
       std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
   }
 
 
   if (sample_type == "curve" or sample_type == "both") {
-  	  lax::write_matrix(d.compute_curve(sample_points),
-  			  	  	    outfile_name.str() + "_curveAVG.txt", ',');
+  	  lax::write_matrix(conflated_document.compute_curve(sample_points),
+  			  	  	    outfile_name.str() + "_confl-curve.txt", ',');
       std::cout << "Wrote curve (" << sample_points << " sample points)\n";
   }
   if (sample_type == "gradient" or sample_type == "both") {
-	  lax::write_matrix(d.compute_derivative(sample_points),
-			   	   	    outfile_name.str() + "_derivAVG.txt", ',');
+	  lax::write_matrix(conflated_document.compute_derivative(sample_points),
+			   	   	    outfile_name.str() + "_confl-deriv.txt", ',');
       std::cout << "Wrote derivative (" << sample_points << " sample points)\n";
   }
 }

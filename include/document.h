@@ -280,8 +280,8 @@ sumCurves(const std::vector<document>& curves)
 	std::string filename = std::accumulate(std::cbegin(curves),
 										   std::cend(curves),
 										   std::string{},
-        [](const std::string& p1, const document& p2) {
-		    return p1 + "+" + p2.filename();
+        [](const std::string& accum, const document& doc) {
+		    return accum + "+" + doc.filename();
 	});
 
 	// Average all the curves.
@@ -311,8 +311,8 @@ concatenateCurves(const std::vector<document>& curves)
 	std::string filename = std::accumulate(std::cbegin(curves),
 										   std::cend(curves),
 										   std::string{},
-        [](const std::string& p1, const document& p2) {
-		    return p1 + "+" + p2.filename();
+        [](const std::string& accum, const document& doc) {
+		    return accum + "+" + doc.filename();
     });
 
 
@@ -337,8 +337,8 @@ conflateCurves(const std::vector<document>& curves)
 	std::string filename = std::accumulate(std::cbegin(curves),
 										   std::cend(curves),
 										   std::string{},
-        [](const std::string& p1, const document& p2) {
-		    return p1 + "+" + p2.filename();
+        [](const std::string& accum, const document& doc) {
+		    return accum + "+" + doc.filename();
 	});
 
 	// Multiply all the curves.
